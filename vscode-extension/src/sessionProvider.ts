@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import * as tmux from './tmux';
 
 export class TmuxSession extends vscode.TreeItem {
@@ -6,17 +7,31 @@ export class TmuxSession extends vscode.TreeItem {
     public readonly name: string,
     public readonly windows: number,
     public readonly attached: boolean,
-    public readonly created: string
+    public readonly created: string,
+    public readonly workingDir: string
   ) {
     super(name, vscode.TreeItemCollapsibleState.None);
 
-    this.description = `${windows} window${windows > 1 ? 's' : ''}${attached ? ' • attached' : ''}`;
-    this.tooltip = `Created: ${created}\nWindows: ${windows}\nAttached: ${attached ? 'Yes' : 'No'}`;
+    // Show project name from working directory
+    const projectName = workingDir ? path.basename(workingDir) : '';
+    const dirDisplay = workingDir
+      ? workingDir.replace(/^\/Users\/[^/]+/, '~')
+      : '';
+
+    this.description = projectName || `${windows} window${windows > 1 ? 's' : ''}`;
+    this.tooltip = [
+      `Session: ${name}`,
+      `Directory: ${dirDisplay || 'N/A'}`,
+      `Windows: ${windows}`,
+      `Attached: ${attached ? 'Yes' : 'No'}`,
+      `Created: ${created}`
+    ].join('\n');
+
     this.contextValue = 'session';
 
     // Icon based on state
     this.iconPath = new vscode.ThemeIcon(
-      attached ? 'terminal-tmux' : 'terminal',
+      attached ? 'vm-running' : 'terminal',
       attached ? new vscode.ThemeColor('terminal.ansiGreen') : undefined
     );
 
@@ -49,11 +64,21 @@ export class TmuxSessionProvider implements vscode.TreeDataProvider<TmuxSession>
 
     // Root level: list all sessions
     const sessionsInfo = await tmux.listSessionsWithInfo();
+
+    // Sort: attached first, then by name
+    sessionsInfo.sort((a, b) => {
+      if (a.attached !== b.attached) {
+        return a.attached ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name);
+    });
+
     return sessionsInfo.map(info => new TmuxSession(
       info.name,
       info.windows,
       info.attached,
-      info.created
+      info.created,
+      info.workingDir
     ));
   }
 }

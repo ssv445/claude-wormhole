@@ -2,7 +2,32 @@ import * as vscode from 'vscode';
 import { TmuxSessionProvider, TmuxSession } from './sessionProvider';
 import * as tmux from './tmux';
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
+  // Check dependencies
+  const hasTmux = await tmux.isTmuxAvailable();
+  if (!hasTmux) {
+    vscode.window.showErrorMessage('tmux is not installed. Please install tmux first.');
+    return;
+  }
+
+  const hasSesh = await tmux.isSeshAvailable();
+  const hasResurrect = await tmux.isTmuxResurrectAvailable();
+
+  if (!hasSesh || !hasResurrect) {
+    const missing = [];
+    if (!hasSesh) missing.push('sesh');
+    if (!hasResurrect) missing.push('tmux-resurrect');
+
+    vscode.window.showWarningMessage(
+      `Recommended tools not found: ${missing.join(', ')}. Session persistence may not work.`,
+      'Install Guide'
+    ).then(selection => {
+      if (selection === 'Install Guide') {
+        vscode.env.openExternal(vscode.Uri.parse('https://github.com/joshmedeski/sesh'));
+      }
+    });
+  }
+
   const sessionProvider = new TmuxSessionProvider();
 
   // Register tree view
@@ -42,7 +67,7 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  // New session
+  // New session (always uses tmux directly)
   context.subscriptions.push(
     vscode.commands.registerCommand('tmux.new', async () => {
       const name = await vscode.window.showInputBox({
@@ -51,17 +76,24 @@ export function activate(context: vscode.ExtensionContext) {
       });
       if (!name) return;
 
+      // Get current workspace folder as working directory
+      const workspaceFolders = vscode.workspace.workspaceFolders;
+      const workingDir = workspaceFolders?.[0]?.uri.fsPath;
+
       const terminal = vscode.window.createTerminal({
         name: `tmux: ${name}`,
         shellPath: '/bin/bash',
-        shellArgs: ['-c', `tmux new-session -s "${name}"`]
+        shellArgs: ['-c', `tmux new-session -s "${name}"${workingDir ? ` -c "${workingDir}"` : ''}`],
+        cwd: workingDir
       });
       terminal.show();
-      sessionProvider.refresh();
+
+      // Refresh after a short delay to show new session
+      setTimeout(() => sessionProvider.refresh(), 500);
     })
   );
 
-  // New session with Claude
+  // New session with Claude (always uses tmux directly)
   context.subscriptions.push(
     vscode.commands.registerCommand('tmux.newWithClaude', async () => {
       const name = await vscode.window.showInputBox({
@@ -70,13 +102,20 @@ export function activate(context: vscode.ExtensionContext) {
       });
       if (!name) return;
 
+      // Get current workspace folder as working directory
+      const workspaceFolders = vscode.workspace.workspaceFolders;
+      const workingDir = workspaceFolders?.[0]?.uri.fsPath;
+
       const terminal = vscode.window.createTerminal({
         name: `tmux: ${name}`,
         shellPath: '/bin/bash',
-        shellArgs: ['-c', `tmux new-session -s "${name}" "claude; exec $SHELL"`]
+        shellArgs: ['-c', `tmux new-session -s "${name}"${workingDir ? ` -c "${workingDir}"` : ''} "claude; exec $SHELL"`],
+        cwd: workingDir
       });
       terminal.show();
-      sessionProvider.refresh();
+
+      // Refresh after a short delay to show new session
+      setTimeout(() => sessionProvider.refresh(), 500);
     })
   );
 

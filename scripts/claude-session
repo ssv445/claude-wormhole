@@ -1,52 +1,100 @@
 #!/bin/bash
-# claude-session - Launch claude in a sesh-managed tmux session
-# Usage: claude-session (or cs)
+# claude-session (cs) - Launch Claude in a tmux session
+# Usage: cs [session-name]
+
+set -e
+
+# Colors
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
+
+# Check dependencies
+check_deps() {
+    local missing=()
+
+    if ! command -v tmux &> /dev/null; then
+        echo -e "${RED}Error: tmux is not installed${NC}"
+        echo "Install with: brew install tmux"
+        exit 1
+    fi
+
+    if ! command -v sesh &> /dev/null; then
+        missing+=("sesh")
+    fi
+
+    if [ ! -d ~/.tmux/plugins/tmux-resurrect ] && [ ! -d ~/.config/tmux/plugins/tmux-resurrect ]; then
+        missing+=("tmux-resurrect")
+    fi
+
+    if [ ${#missing[@]} -gt 0 ]; then
+        echo -e "${YELLOW}Warning: Recommended tools not found: ${missing[*]}${NC}"
+        echo "Session persistence may not work without these."
+        echo ""
+        echo "Install sesh:           brew install joshmedeski/sesh/sesh"
+        echo "Install tmux-resurrect: Add to ~/.tmux.conf:"
+        echo "  set -g @plugin 'tmux-plugins/tmux-resurrect'"
+        echo ""
+    fi
+}
+
+check_deps
 
 PROJECT_NAME=$(basename "$PWD")
 
-# Get existing sessions matching this project
-SESSIONS=$(sesh list -t 2>/dev/null | grep "^${PROJECT_NAME}" || true)
-
-if [ -z "$SESSIONS" ]; then
-    # No existing sessions - create new
-    echo "Creating new session: $PROJECT_NAME"
-    SESSION_NAME="$PROJECT_NAME"
+# Allow custom session name as argument
+if [ -n "$1" ]; then
+    SESSION_NAME="$1"
 else
-    # Show existing sessions
-    echo "Existing sessions for $PROJECT_NAME:"
-    echo ""
+    # Get existing sessions matching this project (using tmux directly)
+    SESSIONS=$(tmux list-sessions -F "#{session_name}" 2>/dev/null | grep "^${PROJECT_NAME}" || true)
 
-    # Number the sessions
-    i=1
-    while IFS= read -r session; do
-        echo "  [$i] $session"
-        ((i++))
-    done <<< "$SESSIONS"
-    echo "  [n] Create new session"
-    echo ""
-
-    read -p "Choice: " choice
-
-    if [[ "$choice" == "n" || "$choice" == "N" ]]; then
-        # Generate new session name with counter
-        COUNT=$(echo "$SESSIONS" | wc -l | tr -d ' ')
-        SESSION_NAME="${PROJECT_NAME}-$((COUNT + 1))"
-        echo "Creating new session: $SESSION_NAME"
+    if [ -z "$SESSIONS" ]; then
+        # No existing sessions - create new
+        echo -e "${GREEN}Creating new session: $PROJECT_NAME${NC}"
+        SESSION_NAME="$PROJECT_NAME"
     else
-        # Select existing session
-        SESSION_NAME=$(echo "$SESSIONS" | sed -n "${choice}p")
-        if [ -z "$SESSION_NAME" ]; then
-            echo "Invalid choice"
-            exit 1
+        # Show existing sessions
+        echo "Existing sessions for $PROJECT_NAME:"
+        echo ""
+
+        # Number the sessions
+        i=1
+        while IFS= read -r session; do
+            # Get working directory for this session
+            DIR=$(tmux display-message -p -t "$session" '#{pane_current_path}' 2>/dev/null | sed "s|$HOME|~|" || echo "")
+            echo "  [$i] $session  ${DIR:+($DIR)}"
+            ((i++))
+        done <<< "$SESSIONS"
+        echo "  [n] Create new session"
+        echo ""
+
+        read -p "Choice: " choice
+
+        if [[ "$choice" == "n" || "$choice" == "N" ]]; then
+            # Generate new session name with counter
+            COUNT=$(echo "$SESSIONS" | wc -l | tr -d ' ')
+            SESSION_NAME="${PROJECT_NAME}-$((COUNT + 1))"
+            echo -e "${GREEN}Creating new session: $SESSION_NAME${NC}"
+        else
+            # Select existing session
+            SESSION_NAME=$(echo "$SESSIONS" | sed -n "${choice}p")
+            if [ -z "$SESSION_NAME" ]; then
+                echo -e "${RED}Invalid choice${NC}"
+                exit 1
+            fi
         fi
     fi
 fi
 
-# Connect to session and run claude
+# Connect to session (using tmux directly, not sesh)
 if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
     # Session exists - attach
-    sesh connect "$SESSION_NAME"
+    echo -e "${GREEN}Attaching to: $SESSION_NAME${NC}"
+    tmux attach-session -t "$SESSION_NAME"
 else
-    # Create new session with claude (falls back to shell when claude exits)
-    sesh connect "$SESSION_NAME" -c "claude; exec $SHELL"
+    # Create new session with Claude (falls back to shell when Claude exits)
+    echo -e "${GREEN}Creating session with Claude: $SESSION_NAME${NC}"
+    tmux new-session -s "$SESSION_NAME" -c "$PWD" "claude; exec $SHELL"
 fi
