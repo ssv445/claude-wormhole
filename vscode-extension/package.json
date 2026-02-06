@@ -3,7 +3,12 @@
   "displayName": "Tmux Sessions",
   "description": "Manage tmux sessions from VS Code - attach, create, and switch sessions",
   "version": "0.1.0",
-  "publisher": "shyam",
+  "publisher": "shyamverma",
+  "author": {
+    "name": "Shyam Verma",
+    "url": "https://shyamverma.com"
+  },
+  "homepage": "https://github.com/ssv445/tmux-tunnel",
   "engines": {
     "vscode": "^1.85.0"
   },
