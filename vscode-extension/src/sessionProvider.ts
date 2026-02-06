@@ -2,6 +2,17 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as tmux from './tmux';
 
+export class TmuxSessionCategory extends vscode.TreeItem {
+  constructor(
+    public readonly label: string,
+    public readonly sessions: tmux.SessionInfo[]
+  ) {
+    super(label, vscode.TreeItemCollapsibleState.Expanded);
+    this.contextValue = 'category';
+    this.description = `${sessions.length} session${sessions.length !== 1 ? 's' : ''}`;
+  }
+}
+
 export class TmuxSession extends vscode.TreeItem {
   constructor(
     public readonly name: string,
@@ -24,6 +35,7 @@ export class TmuxSession extends vscode.TreeItem {
     } else {
       this.description = `${windows} window${windows > 1 ? 's' : ''}`;
     }
+
     this.tooltip = [
       `Session: ${name}`,
       `Directory: ${dirDisplay || 'N/A'}`,
@@ -49,41 +61,53 @@ export class TmuxSession extends vscode.TreeItem {
   }
 }
 
-export class TmuxSessionProvider implements vscode.TreeDataProvider<TmuxSession> {
-  private _onDidChangeTreeData = new vscode.EventEmitter<TmuxSession | undefined | null | void>();
+export class TmuxSessionProvider implements vscode.TreeDataProvider<TmuxSessionCategory | TmuxSession> {
+  private _onDidChangeTreeData = new vscode.EventEmitter<TmuxSessionCategory | TmuxSession | undefined | null | void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   refresh(): void {
     this._onDidChangeTreeData.fire();
   }
 
-  getTreeItem(element: TmuxSession): vscode.TreeItem {
+  getTreeItem(element: TmuxSessionCategory | TmuxSession): vscode.TreeItem {
     return element;
   }
 
-  async getChildren(element?: TmuxSession): Promise<TmuxSession[]> {
-    if (element) {
-      // No children for now (could expand to show windows)
-      return [];
+  async getChildren(element?: TmuxSessionCategory | TmuxSession): Promise<(TmuxSessionCategory | TmuxSession)[]> {
+    if (!element) {
+      // Root level: show categories
+      const allSessions = await tmux.listSessionsWithInfo();
+
+      const attachedSessions = allSessions.filter(s => s.attached);
+      const availableSessions = allSessions.filter(s => !s.attached);
+
+      const categories: TmuxSessionCategory[] = [];
+
+      if (attachedSessions.length > 0) {
+        categories.push(new TmuxSessionCategory('Attached', attachedSessions));
+      }
+
+      if (availableSessions.length > 0) {
+        categories.push(new TmuxSessionCategory('Available', availableSessions));
+      }
+
+      return categories;
     }
 
-    // Root level: list all sessions
-    const sessionsInfo = await tmux.listSessionsWithInfo();
+    if (element instanceof TmuxSessionCategory) {
+      // Category level: return sessions
+      return element.sessions
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(info => new TmuxSession(
+          info.name,
+          info.windows,
+          info.attached,
+          info.created,
+          info.workingDir
+        ));
+    }
 
-    // Sort: attached first, then by name
-    sessionsInfo.sort((a, b) => {
-      if (a.attached !== b.attached) {
-        return a.attached ? -1 : 1;
-      }
-      return a.name.localeCompare(b.name);
-    });
-
-    return sessionsInfo.map(info => new TmuxSession(
-      info.name,
-      info.windows,
-      info.attached,
-      info.created,
-      info.workingDir
-    ));
+    // Session level: no children
+    return [];
   }
 }
