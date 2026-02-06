@@ -19,10 +19,13 @@ export class TmuxDirectoryGroup extends vscode.TreeItem {
     public readonly sessions: tmux.SessionInfo[]
   ) {
     const displayPath = dirPath.replace(/^\/Users\/[^/]+/, '~');
-    super(displayPath, vscode.TreeItemCollapsibleState.Expanded);
+    const dirName = path.basename(dirPath);
+
+    // Show just directory name, not full path
+    super(dirName, vscode.TreeItemCollapsibleState.Expanded);
     this.contextValue = 'directory';
     this.description = `${sessions.length} session${sessions.length !== 1 ? 's' : ''}`;
-    this.iconPath = new vscode.ThemeIcon('folder');
+    this.iconPath = new vscode.ThemeIcon('folder', new vscode.ThemeColor('symbolIcon.folderForeground'));
     this.tooltip = `Directory: ${displayPath}`;
   }
 }
@@ -38,15 +41,8 @@ export class TmuxSession extends vscode.TreeItem {
   ) {
     super(name, vscode.TreeItemCollapsibleState.None);
 
-    // Show project name from working directory
-    const projectName = workingDir ? path.basename(workingDir) : '';
-
-    // Only show directory if different from session name
-    if (projectName && projectName !== name) {
-      this.description = `${projectName} · ${lastActivity}`;
-    } else {
-      this.description = `${windows} window${windows > 1 ? 's' : ''} · ${lastActivity}`;
-    }
+    // Clean, minimal description: just time
+    this.description = lastActivity;
 
     const dirDisplay = workingDir
       ? workingDir.replace(/^\/Users\/[^/]+/, '~')
