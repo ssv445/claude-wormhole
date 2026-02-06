@@ -1,0 +1,94 @@
+{
+  "name": "tmux-sessions",
+  "displayName": "Tmux Sessions",
+  "description": "Manage tmux sessions from VS Code - attach, create, and switch sessions",
+  "version": "0.1.0",
+  "publisher": "shyam",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "tmux-sessions",
+          "title": "Tmux Sessions",
+          "icon": "resources/terminal.svg"
+        }
+      ]
+    },
+    "views": {
+      "tmux-sessions": [
+        {
+          "id": "tmuxSessionsView",
+          "name": "Sessions"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "tmux.refresh",
+        "title": "Refresh Sessions",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "tmux.attach",
+        "title": "Attach to Session"
+      },
+      {
+        "command": "tmux.new",
+        "title": "New Session"
+      },
+      {
+        "command": "tmux.newWithClaude",
+        "title": "New Session with Claude"
+      },
+      {
+        "command": "tmux.kill",
+        "title": "Kill Session"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "tmux.refresh",
+          "when": "view == tmuxSessionsView",
+          "group": "navigation"
+        },
+        {
+          "command": "tmux.new",
+          "when": "view == tmuxSessionsView"
+        },
+        {
+          "command": "tmux.newWithClaude",
+          "when": "view == tmuxSessionsView"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "tmux.attach",
+          "when": "view == tmuxSessionsView && viewItem == session",
+          "group": "inline"
+        },
+        {
+          "command": "tmux.kill",
+          "when": "view == tmuxSessionsView && viewItem == session"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  }
+}

@@ -1,0 +1,52 @@
+#!/bin/bash
+# claude-session - Launch claude in a sesh-managed tmux session
+# Usage: claude-session (or cs)
+
+PROJECT_NAME=$(basename "$PWD")
+
+# Get existing sessions matching this project
+SESSIONS=$(sesh list -t 2>/dev/null | grep "^${PROJECT_NAME}" || true)
+
+if [ -z "$SESSIONS" ]; then
+    # No existing sessions - create new
+    echo "Creating new session: $PROJECT_NAME"
+    SESSION_NAME="$PROJECT_NAME"
+else
+    # Show existing sessions
+    echo "Existing sessions for $PROJECT_NAME:"
+    echo ""
+
+    # Number the sessions
+    i=1
+    while IFS= read -r session; do
+        echo "  [$i] $session"
+        ((i++))
+    done <<< "$SESSIONS"
+    echo "  [n] Create new session"
+    echo ""
+
+    read -p "Choice: " choice
+
+    if [[ "$choice" == "n" || "$choice" == "N" ]]; then
+        # Generate new session name with counter
+        COUNT=$(echo "$SESSIONS" | wc -l | tr -d ' ')
+        SESSION_NAME="${PROJECT_NAME}-$((COUNT + 1))"
+        echo "Creating new session: $SESSION_NAME"
+    else
+        # Select existing session
+        SESSION_NAME=$(echo "$SESSIONS" | sed -n "${choice}p")
+        if [ -z "$SESSION_NAME" ]; then
+            echo "Invalid choice"
+            exit 1
+        fi
+    fi
+fi
+
+# Connect to session and run claude
+if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+    # Session exists - attach
+    sesh connect "$SESSION_NAME"
+else
+    # Create new session with claude (falls back to shell when claude exits)
+    sesh connect "$SESSION_NAME" -c "claude; exec $SHELL"
+fi
