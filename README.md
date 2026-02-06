@@ -101,11 +101,7 @@ Cmd+Shift+P → "Profiles: Import Profile..."
 **Required:**
 - tmux (`brew install tmux`)
 
-**Recommended (for session persistence):**
-- [sesh](https://github.com/joshmedeski/sesh) - `brew install joshmedeski/sesh/sesh`
-- [tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect) - Saves/restores sessions
-
-The extension warns on startup if these are missing.
+That's it! The extension works with just tmux.
 
 ## How Sessions Work
 
@@ -163,7 +159,73 @@ cs
 | `Tmux: Attach to Session` | Pick session from list |
 | `Tmux: New Session` | Create empty session |
 | `Tmux: New Session with Claude` | Create session + start Claude |
+| `Tmux: Detach from Session` | Close terminal and detach |
 | `Tmux: Kill Session` | Terminate a session |
+
+## Recommended Workflow
+
+For the best experience, set up session persistence:
+
+### 1. Install tmux-resurrect
+
+Saves and restores tmux sessions across reboots.
+
+```bash
+# Add to ~/.tmux.conf
+set -g @plugin 'tmux-plugins/tpm'
+set -g @plugin 'tmux-plugins/tmux-resurrect'
+
+# Install TPM if not already installed
+git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+
+# Reload tmux config
+tmux source ~/.tmux.conf
+
+# Press prefix + I (Ctrl+B, then Shift+I) to install plugins
+```
+
+**Usage:**
+- `Ctrl+B Ctrl+S` - Save all sessions
+- `Ctrl+B Ctrl+R` - Restore saved sessions
+
+### 2. Install sesh (optional)
+
+Smart session manager with fuzzy finding.
+
+```bash
+brew install joshmedeski/sesh/sesh
+```
+
+### 3. Configure auto-save (optional)
+
+Add to `~/.tmux.conf` for automatic session saves:
+
+```bash
+# Save sessions every 15 minutes
+set -g @resurrect-save-interval '15'
+
+# Auto-restore on tmux start
+set -g @resurrect-restore 'on'
+```
+
+### 4. Workflow
+
+```bash
+# Start work
+cd ~/projects/my-app
+cs                    # Creates/attaches session
+
+# Work in VS Code
+# - Sessions auto-listed in sidebar
+# - Click to attach
+# - Detach to switch projects
+
+# Before shutdown
+Ctrl+B Ctrl+S        # Save all sessions
+
+# After reboot
+Ctrl+B Ctrl+R        # Restore everything
+```
 
 ## License
 

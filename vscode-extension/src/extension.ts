@@ -7,28 +7,11 @@ const sessionTerminals = new Map<string, vscode.Terminal>();
 
 export async function activate(context: vscode.ExtensionContext) {
   // Check dependencies
+  // Check if tmux is available
   const hasTmux = await tmux.isTmuxAvailable();
   if (!hasTmux) {
     vscode.window.showErrorMessage('tmux is not installed. Please install tmux first.');
     return;
-  }
-
-  const hasSesh = await tmux.isSeshAvailable();
-  const hasResurrect = await tmux.isTmuxResurrectAvailable();
-
-  if (!hasSesh || !hasResurrect) {
-    const missing = [];
-    if (!hasSesh) missing.push('sesh');
-    if (!hasResurrect) missing.push('tmux-resurrect');
-
-    vscode.window.showWarningMessage(
-      `Recommended tools not found: ${missing.join(', ')}. Session persistence may not work.`,
-      'Install Guide'
-    ).then(selection => {
-      if (selection === 'Install Guide') {
-        vscode.env.openExternal(vscode.Uri.parse('https://github.com/joshmedeski/sesh'));
-      }
-    });
   }
 
   const sessionProvider = new TmuxSessionProvider();

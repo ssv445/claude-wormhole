@@ -10,36 +10,12 @@ YELLOW='\033[1;33m'
 GREEN='\033[0;32m'
 NC='\033[0m' # No Color
 
-# Check dependencies
-check_deps() {
-    local missing=()
-
-    if ! command -v tmux &> /dev/null; then
-        echo -e "${RED}Error: tmux is not installed${NC}"
-        echo "Install with: brew install tmux"
-        exit 1
-    fi
-
-    if ! command -v sesh &> /dev/null; then
-        missing+=("sesh")
-    fi
-
-    if [ ! -d ~/.tmux/plugins/tmux-resurrect ] && [ ! -d ~/.config/tmux/plugins/tmux-resurrect ]; then
-        missing+=("tmux-resurrect")
-    fi
-
-    if [ ${#missing[@]} -gt 0 ]; then
-        echo -e "${YELLOW}Warning: Recommended tools not found: ${missing[*]}${NC}"
-        echo "Session persistence may not work without these."
-        echo ""
-        echo "Install sesh:           brew install joshmedeski/sesh/sesh"
-        echo "Install tmux-resurrect: Add to ~/.tmux.conf:"
-        echo "  set -g @plugin 'tmux-plugins/tmux-resurrect'"
-        echo ""
-    fi
-}
-
-check_deps
+# Check tmux is installed
+if ! command -v tmux &> /dev/null; then
+    echo -e "${RED}Error: tmux is not installed${NC}"
+    echo "Install with: brew install tmux"
+    exit 1
+fi
 
 PROJECT_NAME=$(basename "$PWD")
 
