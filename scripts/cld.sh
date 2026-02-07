@@ -1,10 +1,23 @@
 #!/bin/bash
-# claude-session (cs) - Launch Claude in a tmux session
-# Usage: cs [session-name] [-- claude-args...]
-#   cs                    # Auto-detect session from directory
-#   cs my-session         # Use specific session name
-#   cs -- --model opus    # Pass args to claude
-#   cs my-session -- --help  # Custom session + claude args
+# cld - Launch Claude Code (dangerous mode + chrome) in a tmux session
+#
+# Prerequisites:
+#   - tmux        : brew install tmux
+#   - sesh        : brew install joshmedeski/sesh/sesh
+#   - claude      : npm install -g @anthropic-ai/claude-code
+#
+# Usage: cld [session-name] [-- claude-args...]
+#   cld                       # Auto-detect session from current directory
+#   cld my-session            # Use specific session name
+#   cld -- -c                 # Pass extra args to claude
+#   cld my-session -- --model opus  # Custom session + claude args
+#
+# Behavior:
+#   - Auto-detects project name from current directory
+#   - Lists existing tmux sessions matching the project
+#   - Reuses existing session or creates a new one
+#   - Always runs claude with --dangerously-skip-permissions --chrome
+#   - Falls back to shell when claude exits
 
 set -e
 
@@ -84,18 +97,18 @@ if [ -z "$SESSION_NAME" ]; then
     fi
 fi
 
-# Connect to session (using tmux directly, not sesh)
+# Build claude command with always-on flags
+CLAUDE_CMD="claude --dangerously-skip-permissions --chrome"
+if [ -n "$CLAUDE_ARGS" ]; then
+    CLAUDE_CMD="$CLAUDE_CMD $CLAUDE_ARGS"
+fi
+
+# Connect to session
 if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
-    # Session exists - attach
     echo -e "${GREEN}Attaching to: $SESSION_NAME${NC}"
-    tmux attach-session -t "$SESSION_NAME"
+    sesh connect "$SESSION_NAME"
 else
-    # Create new session with Claude (falls back to shell when Claude exits)
-    if [ -n "$CLAUDE_ARGS" ]; then
-        echo -e "${GREEN}Creating session with Claude: $SESSION_NAME (args: $CLAUDE_ARGS)${NC}"
-        tmux new-session -s "$SESSION_NAME" -c "$PWD" "claude $CLAUDE_ARGS; exec $SHELL"
-    else
-        echo -e "${GREEN}Creating session with Claude: $SESSION_NAME${NC}"
-        tmux new-session -s "$SESSION_NAME" -c "$PWD" "claude; exec $SHELL"
-    fi
+    echo -e "${GREEN}Creating session with Claude: $SESSION_NAME${NC}"
+    tmux new-session -d -s "$SESSION_NAME" -c "$PWD" "$CLAUDE_CMD; exec $SHELL"
+    sesh connect "$SESSION_NAME"
 fi

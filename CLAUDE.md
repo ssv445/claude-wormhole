@@ -1,71 +1,57 @@
 # tmux-tunnel
 
-Remote tmux session management for VS Code with mobile support.
+Access Claude Code sessions from your phone over a private Tailscale network.
 
 ## Purpose
 
-Manage tmux sessions (especially Claude Code sessions) from anywhere:
-- VS Code extension with tree view for sessions
-- Mobile-friendly VS Code profile
-- CLI tools for session management
-- Works over VS Code tunnel
+Web-based terminal UI + CLI tooling to manage tmux sessions (especially Claude Code) from any device. Uses Tailscale for private networking - nothing exposed to the public internet. Installable as a PWA on iOS.
 
 ## Status: active
-## Mode: professional
 
 ## Components
 
 ```
 tmux-tunnel/
-├── vscode-extension/     # VS Code extension
-│   ├── src/
-│   │   ├── extension.ts      # Entry point
-│   │   ├── sessionProvider.ts # Tree view
-│   │   └── tmux.ts           # Tmux commands
-│   └── package.json
-├── profiles/
-│   └── Mobile.code-profile   # Touch-friendly VS Code profile
+├── web/                      # Next.js app + WebSocket server (port 3100)
+│   ├── server.ts             # Custom server with node-pty + ws
+│   ├── src/app/              # Next.js pages (session list, terminal)
+│   └── public/               # PWA manifest + icons
 ├── scripts/
-│   └── claude-session        # CLI for quick session launch
+│   ├── cld.sh                # CLI: launch Claude Code in tmux sessions
+│   └── tmux.conf             # tmux config with resurrect + continuum
+├── vscode/
+│   ├── extension/            # VS Code sidebar for session management
+│   └── profiles/             # Touch-optimized VS Code profile
+├── SETUP.md                  # Full setup guide
 └── CLAUDE.md
 ```
 
-## Features
-
-### VS Code Extension
-- [ ] Tree view listing all tmux sessions
-- [ ] Click to attach (opens VS Code terminal with `tmux attach`)
-- [ ] Create new session (with optional Claude auto-start)
-- [ ] Kill/rename sessions
-- [ ] Works over VS Code tunnel
-
-### Mobile Profile
-- [x] 150% zoom, 18pt font
-- [x] Hidden: minimap, breadcrumbs, activity bar
-- [x] Single tab mode
-- [x] Optimized Zen Mode
-
-### CLI (`cs` command)
-- [x] Detect project from current directory
-- [x] List existing sessions
-- [x] Reuse or create new session
-- [x] Auto-launch Claude in new sessions
-
-## Next Tasks
-
-1. Scaffold VS Code extension with package.json
-2. Implement TmuxSessionProvider (tree view)
-3. Add attach/create/kill commands
-4. Test over tunnel
-5. (Future) Mobile web UI fallback
-
 ## Tech Stack
 
-- **Extension**: TypeScript, VS Code Extension API
-- **CLI**: Bash
-- **Profile**: VS Code .code-profile format
+- **Web**: Next.js, xterm.js, node-pty, WebSocket (ws)
+- **CLI**: Bash, tmux, sesh
+- **Networking**: Tailscale serve (HTTPS)
+- **VS Code**: TypeScript extension, .code-profile
 
-## Related
+## Key Architecture
 
-- `cld-master` - Core tmux/Claude session library (dependency)
-- VS Code tunnel (already configured)
+- `web/server.ts` - Custom HTTP server that upgrades WebSocket connections at `/api/terminal?session=<name>`, spawns node-pty processes that attach to tmux sessions
+- `scripts/cld.sh` - Always passes `--dangerously-skip-permissions --chrome` to Claude Code, uses sesh for session management
+- `scripts/tmux.conf` - Includes tmux-resurrect and tmux-continuum for session persistence across reboots
+
+## Dev Commands
+
+```sh
+# Web app
+cd web && npm run dev          # Development (port 3100)
+cd web && npm run build        # Production build
+cd web && npm start            # Production server
+
+# Tailscale
+tailscale serve --bg 3100      # Expose over Tailscale HTTPS
+tailscale serve --bg off       # Stop serving
+
+# Claude sessions
+cld                            # Launch Claude in tmux (needs alias)
+tmux ls                        # List sessions
+```
