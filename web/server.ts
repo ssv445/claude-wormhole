@@ -79,6 +79,15 @@ app.prepare().then(() => {
 
     console.log(`PTY spawned for session: ${session}, pid: ${ptyProcess.pid}`);
 
+    // Heartbeat — detect dead connections (iOS backgrounding kills WS silently)
+    let isAlive = true;
+    ws.on('pong', () => { isAlive = true; });
+    const heartbeat = setInterval(() => {
+      if (!isAlive) { ws.terminate(); return; }
+      isAlive = false;
+      ws.ping();
+    }, 30_000);
+
     // PTY → WebSocket
     ptyProcess.onData((data: string) => {
       if (ws.readyState === WebSocket.OPEN) {
@@ -114,6 +123,7 @@ app.prepare().then(() => {
     });
 
     ws.on('close', () => {
+      clearInterval(heartbeat);
       ptyProcess.kill();
     });
   });

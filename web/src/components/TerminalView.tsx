@@ -83,6 +83,11 @@ const KEYBOARD_SECTIONS = [
   },
 ];
 
+type ConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'failed';
+
+const MAX_RECONNECT_ATTEMPTS = 5;
+const BASE_BACKOFF_MS = 1000;
+
 export function TerminalView({
   session,
   visible,
@@ -98,6 +103,13 @@ export function TerminalView({
   const wsRef = useRef<WebSocket | null>(null);
   const xtermRef = useRef<import('@xterm/xterm').Terminal | null>(null);
   const fitAddonRef = useRef<import('@xterm/addon-fit').FitAddon | null>(null);
+
+  // Reconnection state
+  const [connectionState, setConnectionState] = useState<ConnectionState>('connecting');
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const intentionalCloseRef = useRef(false);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const connectRef = useRef<(() => void) | null>(null);
 
   // Keyboard state
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -167,6 +179,58 @@ export function TerminalView({
 
   useEffect(() => {
     let disposed = false;
+    let windowResizeHandler: (() => void) | null = null;
+    intentionalCloseRef.current = false;
+
+    function connectWebSocket(term: import('@xterm/xterm').Terminal) {
+      if (disposed || intentionalCloseRef.current) return;
+
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(
+        `${proto}//${location.host}/api/terminal?session=${encodeURIComponent(session)}`
+      );
+      wsRef.current = ws;
+      setConnectionState('connecting');
+
+      ws.onopen = () => {
+        setConnectionState('connected');
+        setReconnectAttempt(0);
+        ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+      };
+
+      ws.onmessage = (e) => {
+        term.write(e.data);
+      };
+
+      ws.onclose = () => {
+        if (intentionalCloseRef.current || disposed) return;
+        scheduleReconnect(term);
+      };
+
+      ws.onerror = () => {
+        // onclose fires after onerror — reconnect handled there
+      };
+    }
+
+    function scheduleReconnect(term: import('@xterm/xterm').Terminal) {
+      setConnectionState((prev) => {
+        // Don't overwrite 'failed' with 'reconnecting'
+        if (prev === 'failed') return prev;
+        return 'reconnecting';
+      });
+
+      setReconnectAttempt((attempt) => {
+        if (attempt >= MAX_RECONNECT_ATTEMPTS) {
+          setConnectionState('failed');
+          return attempt;
+        }
+        const delay = BASE_BACKOFF_MS * Math.pow(2, attempt);
+        reconnectTimerRef.current = setTimeout(() => {
+          connectWebSocket(term);
+        }, delay);
+        return attempt + 1;
+      });
+    }
 
     async function init() {
       const { Terminal } = await import('@xterm/xterm');
@@ -190,50 +254,52 @@ export function TerminalView({
       xtermRef.current = term;
       fitAddonRef.current = fitAddon;
 
-      // WebSocket connection
-      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const ws = new WebSocket(
-        `${proto}//${location.host}/api/terminal?session=${encodeURIComponent(session)}`
-      );
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-      };
-
-      ws.onmessage = (e) => {
-        term.write(e.data);
-      };
-
-      ws.onclose = () => {
-        term.write('\r\n\x1b[33m[disconnected]\x1b[0m\r\n');
-      };
-
+      // Use refs so handlers always send on the latest WS
       term.onData((data) => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(data);
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(data);
         }
       });
-
-      const onResize = () => {
-        fitAddon.fit();
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-        }
-      };
 
       term.onResize(({ cols, rows }) => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'resize', cols, rows }));
         }
       });
 
-      window.addEventListener('resize', onResize);
+      windowResizeHandler = () => {
+        fitAddon.fit();
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+        }
+      };
+      window.addEventListener('resize', windowResizeHandler);
+
+      // Expose connect function for manual reconnect and visibilitychange
+      connectRef.current = () => {
+        if (reconnectTimerRef.current) {
+          clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = null;
+        }
+        setReconnectAttempt(0);
+        connectWebSocket(term);
+      };
+
+      // Reconnect immediately when iOS PWA returns from background
+      function handleVisibilityChange() {
+        if (document.visibilityState === 'visible' && wsRef.current?.readyState !== WebSocket.OPEN) {
+          connectRef.current?.();
+        }
+      }
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
+      // Initial connection
+      connectWebSocket(term);
       term.focus();
 
       return () => {
-        window.removeEventListener('resize', onResize);
-        ws.close();
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        if (windowResizeHandler) window.removeEventListener('resize', windowResizeHandler);
         term.dispose();
       };
     }
@@ -242,6 +308,12 @@ export function TerminalView({
 
     return () => {
       disposed = true;
+      intentionalCloseRef.current = true;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      wsRef.current?.close();
       cleanup.then((fn) => fn?.());
     };
     // theme intentionally excluded — handled by separate effect
@@ -262,21 +334,49 @@ export function TerminalView({
         backgroundColor: XTERM_THEMES[theme].background,
       }}
     >
-      {/* Terminal — height adjusts when keyboard is visible */}
+      {/* Terminal + reconnect overlay */}
       <div
-        ref={termRef}
-        className="flex-1 overflow-hidden md:p-2"
+        className="flex-1 overflow-hidden relative"
         style={{
-          // Reduce height when keyboard is visible
           maxHeight: keyboardVisible ? 'calc(100vh - 320px)' : '100%',
         }}
-        onClick={() => {
-          // When virtual keyboard is visible, blur terminal to prevent mobile keyboard
-          if (keyboardVisible && xtermRef.current) {
-            xtermRef.current.blur();
-          }
-        }}
-      />
+      >
+        <div
+          ref={termRef}
+          className="absolute inset-0 md:p-2"
+          onClick={() => {
+            if (keyboardVisible && xtermRef.current) {
+              xtermRef.current.blur();
+            }
+          }}
+        />
+
+        {/* Reconnection overlay */}
+        {(connectionState === 'reconnecting' || connectionState === 'failed') && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-10">
+            <div className="text-center space-y-3">
+              {connectionState === 'reconnecting' ? (
+                <>
+                  <div className="text-yellow-400 text-lg font-mono">Reconnecting...</div>
+                  <div className="text-gray-400 text-sm font-mono">
+                    Attempt {reconnectAttempt} / {MAX_RECONNECT_ATTEMPTS}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-red-400 text-lg font-mono">Connection lost</div>
+                  <button
+                    onClick={() => connectRef.current?.()}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-mono text-sm transition-colors"
+                  >
+                    Reconnect
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Floating keyboard toggle button (FAB) - Mobile only */}
       <button
