@@ -46,6 +46,28 @@ export default function Home() {
   const { isFullscreen, toggle: toggleFullscreen, isIOS, isPWA } = useFullscreen();
   const [showIOSHint, setShowIOSHint] = useState(false);
 
+  // Sync URL → session on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const session = params.get('session');
+    if (session) {
+      setOpenTabs((prev) => (prev.includes(session) ? prev : [...prev, session]));
+      setActiveTab(session);
+    }
+  }, []);
+
+  // Sync session → URL when activeTab changes
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (activeTab) {
+      params.set('session', activeTab);
+    } else {
+      params.delete('session');
+    }
+    const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname;
+    history.replaceState(null, '', newUrl);
+  }, [activeTab]);
+
   const attachSession = useCallback((name: string) => {
     setOpenTabs((prev) => (prev.includes(name) ? prev : [...prev, name]));
     setActiveTab(name);
@@ -66,9 +88,9 @@ export default function Home() {
   // Sidebar content — shared between mobile drawer and desktop pinned sidebar
   const sidebar = (
     <>
-      <div className="flex items-center justify-between px-3 py-3 border-b border-border">
+      <div className="flex items-center justify-between px-4 py-4 border-b border-border">
         <h1 className="text-sm font-bold tracking-tight">tmux-tunnel</h1>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           <button
             onClick={toggleTheme}
             className="p-1.5 text-muted hover:text-primary text-sm transition-colors"
@@ -94,6 +116,15 @@ export default function Home() {
               {isFullscreen ? '\u2716' : '\u26F6'}
             </button>
           ) : null}
+          {activeTab && (
+            <button
+              onClick={() => window.location.reload()}
+              className="p-1.5 text-muted hover:text-primary text-sm transition-colors"
+              title="Reload session"
+            >
+              {'\u21BB'}
+            </button>
+          )}
           <button
             onClick={() => setShowNewDialog(true)}
             className="p-1.5 text-muted hover:text-primary text-sm transition-colors"
@@ -104,8 +135,8 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto py-2 px-1">
-        <div className="px-2 pb-1 text-xs font-medium text-muted uppercase tracking-wider">
+      <div className="flex-1 overflow-y-auto py-3 px-2">
+        <div className="px-2 pb-2 text-xs font-medium text-muted uppercase tracking-wider">
           Sessions
         </div>
         <SessionList
@@ -163,9 +194,22 @@ export default function Home() {
               <span className="text-sm font-bold tracking-tight">tmux-tunnel</span>
             )}
           </div>
-          {openTabs.length > 1 && (
-            <span className="text-xs text-muted shrink-0 mr-1">{openTabs.length} tabs</span>
-          )}
+          <div className="flex items-center gap-1 shrink-0 mr-1">
+            {openTabs.length > 1 && (
+              <span className="text-xs text-muted">{openTabs.length} tabs</span>
+            )}
+            {activeTab && (
+              <button
+                onClick={() => window.location.reload()}
+                className="p-1.5 text-muted hover:text-primary transition-colors"
+                title="Reload session"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Content: terminal or empty state */}
