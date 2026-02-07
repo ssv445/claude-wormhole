@@ -30,11 +30,17 @@ export async function POST(req: NextRequest) {
   try {
     const { type, message, session } = await req.json();
 
-    if (isDuplicate(type || 'notify', session || '')) {
+    const notifyType = type || 'notify';
+    const notifySession = session || '';
+
+    if (isDuplicate(notifyType, notifySession)) {
+      console.log(`[notify] deduped ${notifyType}:${notifySession}`);
       return NextResponse.json({ ok: true, deduped: true });
     }
 
-    const title =
+    console.log(`[notify] sending ${notifyType}:${notifySession}`);
+
+    const label =
       type === 'permission'
         ? 'Permission needed'
         : type === 'idle'
@@ -42,6 +48,8 @@ export async function POST(req: NextRequest) {
           : type === 'stop'
             ? 'Task complete'
             : 'Claude Bridge';
+
+    const title = session ? `${session} — ${label}` : label;
 
     await sendPushToAll({
       title,
