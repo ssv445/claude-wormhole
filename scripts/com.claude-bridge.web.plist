@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.claude-bridge.web</string>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/shyam/www/claude-bridge/web</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/shyam/.nvm/versions/node/v24.13.0/bin/node</string>
+        <string>node_modules/.bin/tsx</string>
+        <string>server.ts</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>NODE_ENV</key>
+        <string>production</string>
+        <key>PATH</key>
+        <string>/Users/shyam/.nvm/versions/node/v24.13.0/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/claude-bridge.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/claude-bridge.err</string>
+</dict>
+</plist>

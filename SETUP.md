@@ -145,7 +145,55 @@ To stop serving:
 tailscale serve --bg off
 ```
 
-## 5. Backup: SSH via Terminus
+## 5. Run as Service (Auto-start + Keepalive)
+
+The web server can be configured to start automatically on login and restart if it crashes, using macOS launchd.
+
+### Install
+
+```sh
+./scripts/service.sh install
+```
+
+This will:
+1. Build the web app (`npm run build`)
+2. Enable `tailscale serve --bg 3100`
+3. Copy the launchd plist to `~/Library/LaunchAgents/`
+4. Load and start the agent
+
+### Manage
+
+```sh
+./scripts/service.sh status    # Check if running
+./scripts/service.sh logs      # Tail stdout + stderr
+./scripts/service.sh restart   # Stop + start
+./scripts/service.sh stop      # Stop the agent
+./scripts/service.sh start     # Start the agent
+```
+
+### Uninstall
+
+```sh
+./scripts/service.sh uninstall
+```
+
+### Standalone start (without launchd)
+
+If you prefer to start manually without the service:
+
+```sh
+./scripts/start.sh
+```
+
+This builds if needed, enables tailscale serve, and starts the server.
+
+### Logs
+
+Logs are written to:
+- **stdout**: `/tmp/claude-bridge.log`
+- **stderr**: `/tmp/claude-bridge.err`
+
+## 6. Backup: SSH via Terminus
 
 If the web UI is down or you prefer a native terminal, use SSH as a fallback.
 
@@ -173,7 +221,7 @@ tmux attach -t my-app
 
 This works anywhere on your Tailscale network without exposing SSH to the public internet.
 
-## 6. Install the PWA on iOS
+## 7. Install the PWA on iOS
 
 The web app includes a PWA manifest for an app-like experience on your phone.
 
