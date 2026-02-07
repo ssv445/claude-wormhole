@@ -61,14 +61,21 @@ self.addEventListener('push', (event) => {
     }
   }
 
+  const tag = data.tag || 'claude-bridge';
+
   event.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
-      tag: data.tag || 'claude-bridge',
-      data: data,
-      vibrate: [200, 100, 200],
+    // Check if a notification with this tag already exists
+    self.registration.getNotifications({ tag }).then((existing) => {
+      return self.registration.showNotification(data.title, {
+        body: data.body,
+        icon: '/icon-192.png',
+        badge: '/icon-192.png',
+        tag,
+        data: data,
+        // Only vibrate/alert if this is a new notification, not a replacement
+        renotify: existing.length === 0,
+        vibrate: [200, 100, 200],
+      });
     })
   );
 });
