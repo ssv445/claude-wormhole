@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
           ? 'Claude waiting'
           : type === 'stop'
             ? 'Task complete'
-            : 'claude-bridge';
+            : 'Claude Bridge';
 
     await sendPushToAll({
       title,

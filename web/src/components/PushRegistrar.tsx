@@ -12,6 +12,16 @@ export function PushRegistrar() {
       return;
     }
 
+    // Auto-reload when a new service worker takes over (e.g. after deploy).
+    // This ensures the page always runs with the latest SW + cache.
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!reloading) {
+        reloading = true;
+        window.location.reload();
+      }
+    });
+
     async function check() {
       try {
         const reg = await navigator.serviceWorker.register('/sw.js');

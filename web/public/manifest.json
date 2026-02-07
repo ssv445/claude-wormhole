@@ -1,6 +1,6 @@
 {
-  "name": "claude-bridge",
-  "short_name": "claude",
+  "name": "Claude Bridge",
+  "short_name": "Claude Bridge",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#09090b",

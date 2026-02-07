@@ -1,7 +1,7 @@
 // Service worker for claude-bridge PWA
 
 // Cache app shell on install
-const CACHE_NAME = 'claude-bridge-v1';
+const CACHE_NAME = 'claude-bridge';
 const SHELL_URLS = ['/', '/manifest.json'];
 
 self.addEventListener('install', (event) => {
@@ -12,12 +12,12 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
+  // Purge all caches and rebuild — no manual version bumps needed.
+  // Any change to this file triggers a new SW install, which clears stale content.
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
-      )
-    )
+    caches.keys()
+      .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+      .then(() => caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_URLS)))
   );
   self.clients.claim();
 });
@@ -50,7 +50,7 @@ self.addEventListener('fetch', (event) => {
 
 // Push notification handler
 self.addEventListener('push', (event) => {
-  let data = { title: 'claude-bridge', body: 'Claude needs attention' };
+  let data = { title: 'Claude Bridge', body: 'Claude needs attention' };
 
   if (event.data) {
     try {

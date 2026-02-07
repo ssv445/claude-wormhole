@@ -3,12 +3,12 @@ import './globals.css';
 import { PushRegistrar } from '@/components/PushRegistrar';
 
 export const metadata: Metadata = {
-  title: 'claude-bridge',
+  title: 'Claude Bridge',
   description: 'Remote Claude Code session management',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
-    title: 'claude-bridge',
+    title: 'Claude Bridge',
     statusBarStyle: 'black-translucent',
   },
 };
