@@ -4,26 +4,39 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { XTERM_THEMES, type Theme } from '@/lib/theme';
 import '@xterm/xterm/css/xterm.css';
 
-// Mobile key shortcuts organized by function
+// Mobile key shortcuts organized by function (Claude Code optimized)
 const KEYBOARD_SECTIONS = [
   {
-    title: 'Edit',
+    title: 'Quick Access',
     keys: [
-      { label: '^A', key: '\x01', desc: 'Line start' },
-      { label: '^E', key: '\x05', desc: 'Line end' },
-      { label: '^K', key: '\x0b', desc: 'Kill line' },
-      { label: '^U', key: '\x15', desc: 'Kill back' },
-      { label: '^W', key: '\x17', desc: 'Kill word' },
+      { label: 'Esc', key: '\x1b', desc: 'Escape/Cancel' },
+      { label: 'Tab', key: '\t', desc: 'Tab/Autocomplete' },
+      { label: 'S+Tab', key: '\x1b[Z', desc: 'Toggle mode' },
+      { label: '^C', key: '\x03', desc: 'Interrupt' },
+      { label: '^D', key: '\x04', desc: 'Exit session' },
+      { label: '^L', key: '\x0c', desc: 'Clear screen' },
+      { label: '^R', key: '\x12', desc: 'History search' },
     ],
   },
   {
-    title: 'Control',
+    title: 'Line Edit',
     keys: [
-      { label: '^C', key: '\x03', desc: 'Interrupt' },
-      { label: '^D', key: '\x04', desc: 'Exit' },
-      { label: '^Z', key: '\x1a', desc: 'Suspend' },
-      { label: '^L', key: '\x0c', desc: 'Clear' },
-      { label: '^R', key: '\x12', desc: 'Search' },
+      { label: '^A', key: '\x01', desc: 'Line start' },
+      { label: '^E', key: '\x05', desc: 'Line end' },
+      { label: '^K', key: '\x0b', desc: 'Kill to end' },
+      { label: '^U', key: '\x15', desc: 'Kill to start' },
+      { label: '^W', key: '\x17', desc: 'Kill word' },
+      { label: '^Y', key: '\x19', desc: 'Paste killed' },
+    ],
+  },
+  {
+    title: 'Claude Code',
+    keys: [
+      { label: '^G', key: '\x07', desc: 'Open editor' },
+      { label: '^O', key: '\x0f', desc: 'Verbose mode' },
+      { label: '^B', key: '\x02', desc: 'Background task' },
+      { label: '^T', key: '\x14', desc: 'Toggle tasks' },
+      { label: '^J', key: '\x0a', desc: 'New line' },
     ],
   },
   {
@@ -35,17 +48,37 @@ const KEYBOARD_SECTIONS = [
       { label: '\u2193', key: '\x1b[B', desc: 'Down' },
       { label: 'Home', key: '\x1b[H', desc: 'Home' },
       { label: 'End', key: '\x1b[F', desc: 'End' },
-      { label: 'PgUp', key: '\x1b[5~', desc: 'Page up' },
-      { label: 'PgDn', key: '\x1b[6~', desc: 'Page down' },
-      { label: 'Del', key: '\x1b[3~', desc: 'Delete' },
     ],
   },
   {
-    title: 'Special',
+    title: 'Page',
     keys: [
-      { label: 'Esc', key: '\x1b', desc: 'Escape' },
-      { label: 'Tab', key: '\t', desc: 'Tab' },
-      { label: '^\\', key: '\x1c', desc: 'Quit' },
+      { label: 'PgUp', key: '\x1b[5~', desc: 'Page up' },
+      { label: 'PgDn', key: '\x1b[6~', desc: 'Page down' },
+      { label: 'Del', key: '\x1b[3~', desc: 'Delete' },
+      { label: 'Ins', key: '\x1b[2~', desc: 'Insert' },
+    ],
+  },
+  {
+    title: 'Alt Keys',
+    keys: [
+      { label: 'Alt+B', key: '\x1bb', desc: 'Back word' },
+      { label: 'Alt+F', key: '\x1bf', desc: 'Forward word' },
+      { label: 'Alt+Y', key: '\x1by', desc: 'Paste cycle' },
+      { label: 'Alt+P', key: '\x1bp', desc: 'Switch model' },
+      { label: 'Alt+M', key: '\x1bm', desc: 'Toggle mode' },
+      { label: 'Alt+T', key: '\x1bt', desc: 'Toggle think' },
+    ],
+  },
+  {
+    title: 'Symbols',
+    keys: [
+      { label: '/', key: '/', desc: 'Command' },
+      { label: '!', key: '!', desc: 'Bash mode' },
+      { label: '@', key: '@', desc: 'File mention' },
+      { label: '|', key: '|', desc: 'Pipe' },
+      { label: '~', key: '~', desc: 'Tilde' },
+      { label: '-', key: '-', desc: 'Dash' },
     ],
   },
 ];
