@@ -98,69 +98,25 @@ export function TerminalView({
   const wsRef = useRef<WebSocket | null>(null);
   const xtermRef = useRef<import('@xterm/xterm').Terminal | null>(null);
   const fitAddonRef = useRef<import('@xterm/addon-fit').FitAddon | null>(null);
-  const keyboardRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef({ isDragging: false, startX: 0, startY: 0, initialX: 0, initialY: 0 });
 
   // Keyboard state
   const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const [keyboardPosition, setKeyboardPosition] = useState({ x: 16, y: window.innerHeight - 200 });
 
   const sendKey = useCallback((key: string) => {
     wsRef.current?.send(key);
   }, []);
 
-  // Drag handlers
-  const handleDragStart = useCallback((e: React.TouchEvent | React.MouseEvent) => {
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-
-    dragRef.current = {
-      isDragging: true,
-      startX: clientX,
-      startY: clientY,
-      initialX: keyboardPosition.x,
-      initialY: keyboardPosition.y,
-    };
-  }, [keyboardPosition]);
-
-  const handleDragMove = useCallback((e: TouchEvent | MouseEvent) => {
-    if (!dragRef.current.isDragging) return;
-
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-
-    const deltaX = clientX - dragRef.current.startX;
-    const deltaY = clientY - dragRef.current.startY;
-
-    setKeyboardPosition({
-      x: dragRef.current.initialX + deltaX,
-      y: dragRef.current.initialY + deltaY,
-    });
-  }, []);
-
-  const handleDragEnd = useCallback(() => {
-    dragRef.current.isDragging = false;
-  }, []);
-
-  // Attach global drag listeners
+  // Blur terminal when virtual keyboard is shown to prevent mobile keyboard
+  // and refit terminal when keyboard visibility changes
   useEffect(() => {
-    const handleMove = (e: TouchEvent | MouseEvent) => handleDragMove(e);
-    const handleEnd = () => handleDragEnd();
-
-    if (keyboardVisible) {
-      window.addEventListener('mousemove', handleMove);
-      window.addEventListener('mouseup', handleEnd);
-      window.addEventListener('touchmove', handleMove);
-      window.addEventListener('touchend', handleEnd);
+    if (keyboardVisible && xtermRef.current) {
+      xtermRef.current.blur();
     }
-
-    return () => {
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleEnd);
-      window.removeEventListener('touchmove', handleMove);
-      window.removeEventListener('touchend', handleEnd);
-    };
-  }, [keyboardVisible, handleDragMove, handleDragEnd]);
+    // Refit terminal to new container size
+    if (fitAddonRef.current) {
+      requestAnimationFrame(() => fitAddonRef.current?.fit());
+    }
+  }, [keyboardVisible]);
 
   // Update xterm theme when theme prop changes
   useEffect(() => {
@@ -262,7 +218,8 @@ export function TerminalView({
 
   function handleMobileKey(key: string) {
     sendKey(key);
-    xtermRef.current?.focus();
+    // Don't refocus terminal to prevent mobile keyboard from showing
+    // xtermRef.current?.focus();
   }
 
   return (
@@ -273,13 +230,30 @@ export function TerminalView({
         backgroundColor: XTERM_THEMES[theme].background,
       }}
     >
-      {/* Terminal — padded on desktop for breathing room */}
-      <div ref={termRef} className="flex-1 overflow-hidden md:p-2" />
+      {/* Terminal — height adjusts when keyboard is visible */}
+      <div
+        ref={termRef}
+        className="flex-1 overflow-hidden md:p-2"
+        style={{
+          // Reduce height when keyboard is visible
+          maxHeight: keyboardVisible ? 'calc(100vh - 320px)' : '100%',
+        }}
+        onClick={() => {
+          // When virtual keyboard is visible, blur terminal to prevent mobile keyboard
+          if (keyboardVisible && xtermRef.current) {
+            xtermRef.current.blur();
+          }
+        }}
+      />
 
       {/* Floating keyboard toggle button (FAB) - Mobile only */}
       <button
         onClick={() => setKeyboardVisible(!keyboardVisible)}
-        className="fixed bottom-4 right-4 w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg flex items-center justify-center z-50 md:hidden transition-transform active:scale-95"
+        className="fixed right-4 w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg flex items-center justify-center z-50 md:hidden transition-all active:scale-95"
+        style={{
+          // Move FAB up when keyboard is visible
+          bottom: keyboardVisible ? '324px' : '16px',
+        }}
         title={keyboardVisible ? 'Hide keyboard' : 'Show keyboard'}
       >
         <svg
@@ -306,32 +280,15 @@ export function TerminalView({
         </svg>
       </button>
 
-      {/* Floating draggable keyboard - Mobile only */}
+      {/* Fixed bottom keyboard - Mobile only */}
       {keyboardVisible && (
-        <div
-          ref={keyboardRef}
-          className="fixed z-40 md:hidden"
-          style={{
-            left: `${keyboardPosition.x}px`,
-            top: `${keyboardPosition.y}px`,
-            maxWidth: 'calc(100vw - 32px)',
-          }}
-        >
-          {/* Drag handle */}
-          <div
-            className="bg-surface/95 backdrop-blur-sm border border-border rounded-t-lg px-3 py-2 cursor-move flex items-center justify-between"
-            onMouseDown={handleDragStart}
-            onTouchStart={handleDragStart}
-          >
-            <div className="flex items-center gap-2">
-              <svg className="w-4 h-4 text-muted" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M9 3h2v2H9V3zm4 0h2v2h-2V3zM9 7h2v2H9V7zm4 0h2v2h-2V7zM9 11h2v2H9v-2zm4 0h2v2h-2v-2zM9 15h2v2H9v-2zm4 0h2v2h-2v-2z" />
-              </svg>
-              <span className="text-xs text-muted font-mono">Drag to move</span>
-            </div>
+        <div className="flex flex-col border-t border-border bg-surface shrink-0 md:hidden">
+          {/* Keyboard header */}
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+            <span className="text-xs text-muted font-mono">Virtual Keyboard</span>
             <button
               onClick={() => setKeyboardVisible(false)}
-              className="text-muted hover:text-primary"
+              className="text-muted hover:text-primary p-1"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -339,8 +296,8 @@ export function TerminalView({
             </button>
           </div>
 
-          {/* Keyboard keys - organized by sections */}
-          <div className="flex flex-col gap-2 px-2 py-2 bg-surface/95 backdrop-blur-sm border-x border-b border-border rounded-b-lg shadow-2xl">
+          {/* Keyboard sections - scrollable container */}
+          <div className="flex flex-col gap-2 px-2 py-2 overflow-y-auto max-h-72">
             {KEYBOARD_SECTIONS.map((section) => (
               <div key={section.title} className="flex flex-col gap-1">
                 {/* Section label */}
