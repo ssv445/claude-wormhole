@@ -88,6 +88,9 @@ type ConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'failed';
 const MAX_RECONNECT_ATTEMPTS = 5;
 const BASE_BACKOFF_MS = 1000;
 
+const isMobile = () =>
+  typeof window !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
 export function TerminalView({
   session,
   visible,
@@ -103,6 +106,10 @@ export function TerminalView({
   const wsRef = useRef<WebSocket | null>(null);
   const xtermRef = useRef<import('@xterm/xterm').Terminal | null>(null);
   const fitAddonRef = useRef<import('@xterm/addon-fit').FitAddon | null>(null);
+  const searchAddonRef = useRef<import('@xterm/addon-search').SearchAddon | null>(null);
+
+  // Prevent double-paste: both paste event and onData fire when pasting
+  const isPastingRef = useRef(false);
 
   // Reconnection state
   const [connectionState, setConnectionState] = useState<ConnectionState>('connecting');
@@ -114,6 +121,14 @@ export function TerminalView({
   // Keyboard state
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [clipboardStatus, setClipboardStatus] = useState<{ copy?: string; paste?: string }>({});
+
+  // Search state
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Scroll-to-bottom tracking
+  const [isAtBottom, setIsAtBottom] = useState(true);
 
   const sendKey = useCallback((key: string) => {
     wsRef.current?.send(key);
@@ -150,6 +165,37 @@ export function TerminalView({
     setTimeout(() => setClipboardStatus((s) => ({ ...s, paste: undefined })), 1500);
   }, []);
 
+  // Search handlers
+  const openSearch = useCallback(() => {
+    setSearchVisible(true);
+    // Focus the input after React renders it
+    setTimeout(() => searchInputRef.current?.focus(), 0);
+  }, []);
+
+  const closeSearch = useCallback(() => {
+    setSearchVisible(false);
+    setSearchQuery('');
+    searchAddonRef.current?.clearDecorations();
+    xtermRef.current?.focus();
+  }, []);
+
+  const findNext = useCallback(() => {
+    if (searchQuery && searchAddonRef.current) {
+      searchAddonRef.current.findNext(searchQuery, { regex: false, caseSensitive: false, incremental: true });
+    }
+  }, [searchQuery]);
+
+  const findPrevious = useCallback(() => {
+    if (searchQuery && searchAddonRef.current) {
+      searchAddonRef.current.findPrevious(searchQuery, { regex: false, caseSensitive: false, incremental: true });
+    }
+  }, [searchQuery]);
+
+  // Auto-search as user types
+  useEffect(() => {
+    if (searchVisible && searchQuery) findNext();
+  }, [searchQuery, searchVisible, findNext]);
+
   // Blur terminal when virtual keyboard is shown to prevent mobile keyboard
   // and refit terminal when keyboard visibility changes
   useEffect(() => {
@@ -169,17 +215,21 @@ export function TerminalView({
     }
   }, [theme]);
 
-  // Re-fit when becoming visible
+  // Re-fit when becoming visible (double-fit for stale computed styles)
   useEffect(() => {
     if (visible && fitAddonRef.current) {
-      // Small delay to let display:none clear before measuring
-      requestAnimationFrame(() => fitAddonRef.current?.fit());
+      requestAnimationFrame(() => {
+        fitAddonRef.current?.fit();
+        // Second fit after layout settles — handles stale getComputedStyle
+        setTimeout(() => fitAddonRef.current?.fit(), 50);
+      });
     }
   }, [visible]);
 
   useEffect(() => {
     let disposed = false;
-    let windowResizeHandler: (() => void) | null = null;
+    let resizeObserver: ResizeObserver | null = null;
+    let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
     intentionalCloseRef.current = false;
 
     function connectWebSocket(term: import('@xterm/xterm').Terminal) {
@@ -236,26 +286,89 @@ export function TerminalView({
       const { Terminal } = await import('@xterm/xterm');
       const { FitAddon } = await import('@xterm/addon-fit');
       const { WebLinksAddon } = await import('@xterm/addon-web-links');
+      const { SearchAddon } = await import('@xterm/addon-search');
+      // CanvasAddon: GPU-accelerated rendering, must load after term.open()
+      const { CanvasAddon } = await import('@xterm/addon-canvas');
 
       if (disposed || !termRef.current) return;
 
+      const mobile = isMobile();
       const term = new Terminal({
         cursorBlink: true,
-        fontSize: 14,
+        cursorStyle: 'bar',
+        cursorWidth: 2,
+        fontSize: mobile ? 11 : 14,
         fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace',
+        fontWeight: '400',
+        fontWeightBold: '600',
+        lineHeight: mobile ? 1.15 : 1.2,
+        scrollback: 15000,
+        scrollSensitivity: mobile ? 3 : 1,
+        fastScrollSensitivity: 5,
+        fastScrollModifier: 'alt',
+        smoothScrollDuration: 100,
+        allowProposedApi: true,
         theme: XTERM_THEMES[theme],
       });
 
       const fitAddon = new FitAddon();
+      const searchAddon = new SearchAddon();
       term.loadAddon(fitAddon);
       term.loadAddon(new WebLinksAddon());
+      term.loadAddon(searchAddon);
+
+      // Open terminal, then load CanvasAddon (needs DOM to exist)
       term.open(termRef.current);
+      try {
+        term.loadAddon(new CanvasAddon());
+      } catch {
+        // CanvasAddon can fail on some devices — fall back to default renderer
+      }
       fitAddon.fit();
+
       xtermRef.current = term;
       fitAddonRef.current = fitAddon;
+      searchAddonRef.current = searchAddon;
 
-      // Use refs so handlers always send on the latest WS
+      // Cmd/Ctrl+C: copy when text is selected, otherwise send SIGINT
+      term.attachCustomKeyEventHandler((event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key === 'c' && event.type === 'keydown') {
+          if (term.hasSelection()) {
+            const selection = term.getSelection();
+            if (selection) navigator.clipboard.writeText(selection);
+            term.clearSelection();
+            return false; // prevent xterm from sending ^C
+          }
+        }
+        // Cmd/Ctrl+Shift+F: open search
+        if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key === 'F' && event.type === 'keydown') {
+          // setState inside a keyhandler — defer to avoid React batching issues
+          setTimeout(() => {
+            setSearchVisible(true);
+            setTimeout(() => searchInputRef.current?.focus(), 0);
+          }, 0);
+          return false;
+        }
+        return true;
+      });
+
+      // Prevent double-paste: intercept native paste on the terminal element
+      const termElement = termRef.current;
+      const pasteHandler = (e: Event) => {
+        const clipboardEvent = e as ClipboardEvent;
+        const text = clipboardEvent.clipboardData?.getData('text');
+        if (text && wsRef.current?.readyState === WebSocket.OPEN) {
+          e.preventDefault();
+          isPastingRef.current = true;
+          wsRef.current.send(text);
+          setTimeout(() => { isPastingRef.current = false; }, 50);
+        }
+      };
+      termElement?.addEventListener('paste', pasteHandler);
+
+      // Send input to WebSocket, skip if paste already handled it
       term.onData((data) => {
+        if (isPastingRef.current) return;
         if (wsRef.current?.readyState === WebSocket.OPEN) {
           wsRef.current.send(data);
         }
@@ -267,13 +380,44 @@ export function TerminalView({
         }
       });
 
-      windowResizeHandler = () => {
-        fitAddon.fit();
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-          wsRef.current.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+      // Track scroll position for scroll-to-bottom button
+      term.onScroll(() => {
+        const buffer = term.buffer.active;
+        setIsAtBottom(buffer.viewportY >= buffer.baseY);
+      });
+      // Also reset when new data arrives and user is at bottom
+      term.onWriteParsed(() => {
+        const buffer = term.buffer.active;
+        if (buffer.viewportY >= buffer.baseY - 1) {
+          setIsAtBottom(true);
         }
+      });
+
+      // Debounced resize handler with double-fit
+      const handleResize = () => {
+        if (resizeTimeout) clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+          requestAnimationFrame(() => {
+            fitAddon.fit();
+            // Second fit after layout settles
+            setTimeout(() => fitAddon.fit(), 50);
+          });
+        }, mobile ? 100 : 50);
       };
-      window.addEventListener('resize', windowResizeHandler);
+
+      // Multiple resize sources for thorough coverage
+      window.addEventListener('resize', handleResize);
+
+      // ResizeObserver on terminal container — catches sidebar toggle, DevTools, etc.
+      if (termRef.current) {
+        resizeObserver = new ResizeObserver(handleResize);
+        resizeObserver.observe(termRef.current);
+      }
+
+      // Mobile: visual viewport resize (keyboard show/hide)
+      window.visualViewport?.addEventListener('resize', handleResize);
+      // Mobile: orientation changes
+      screen.orientation?.addEventListener('change', handleResize);
 
       // Expose connect function for manual reconnect and visibilitychange
       connectRef.current = () => {
@@ -299,8 +443,13 @@ export function TerminalView({
 
       return () => {
         document.removeEventListener('visibilitychange', handleVisibilityChange);
-        if (windowResizeHandler) window.removeEventListener('resize', windowResizeHandler);
-        term.dispose();
+        window.removeEventListener('resize', handleResize);
+        window.visualViewport?.removeEventListener('resize', handleResize);
+        screen.orientation?.removeEventListener('change', handleResize);
+        resizeObserver?.disconnect();
+        termElement?.removeEventListener('paste', pasteHandler);
+        if (resizeTimeout) clearTimeout(resizeTimeout);
+        try { term.dispose(); } catch { /* ignore if already disposed */ }
       };
     }
 
@@ -341,15 +490,78 @@ export function TerminalView({
           maxHeight: keyboardVisible ? 'calc(100vh - 320px)' : '100%',
         }}
       >
+        {/* NO padding on terminal div — FitAddon reads offsetHeight which
+            includes padding, but xterm renders inside padding box, causing
+            dimension mismatch. Use md:p-2 on the wrapper if needed. */}
         <div
           ref={termRef}
-          className="absolute inset-0 md:p-2"
+          className="absolute inset-0 md:inset-2"
           onClick={() => {
             if (keyboardVisible && xtermRef.current) {
               xtermRef.current.blur();
             }
           }}
         />
+
+        {/* Search bar */}
+        {searchVisible && (
+          <div className="absolute top-2 right-2 z-20 flex items-center gap-1 bg-surface border border-border rounded-lg px-2 py-1.5 shadow-lg">
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.shiftKey ? findPrevious() : findNext();
+                }
+                if (e.key === 'Escape') closeSearch();
+              }}
+              placeholder="Search..."
+              className="bg-transparent text-sm text-primary outline-none w-48 font-mono placeholder:text-muted"
+            />
+            <button
+              onClick={findPrevious}
+              className="p-1 text-muted hover:text-primary transition-colors"
+              title="Previous (Shift+Enter)"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+              </svg>
+            </button>
+            <button
+              onClick={findNext}
+              className="p-1 text-muted hover:text-primary transition-colors"
+              title="Next (Enter)"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <button
+              onClick={closeSearch}
+              className="p-1 text-muted hover:text-primary transition-colors"
+              title="Close (Escape)"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
+
+        {/* Scroll-to-bottom button */}
+        {!isAtBottom && (
+          <button
+            onClick={() => xtermRef.current?.scrollToBottom()}
+            className="absolute bottom-3 right-3 z-20 w-8 h-8 rounded-full bg-surface border border-border flex items-center justify-center text-muted hover:text-primary shadow-lg transition-colors"
+            title="Scroll to bottom"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        )}
 
         {/* Reconnection overlay */}
         {(connectionState === 'reconnecting' || connectionState === 'failed') && (
