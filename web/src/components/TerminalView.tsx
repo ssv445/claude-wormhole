@@ -168,33 +168,40 @@ export function TerminalView({
   // Search handlers
   const openSearch = useCallback(() => {
     setSearchVisible(true);
-    // Focus the input after React renders it
     setTimeout(() => searchInputRef.current?.focus(), 0);
   }, []);
 
   const closeSearch = useCallback(() => {
     setSearchVisible(false);
     setSearchQuery('');
-    searchAddonRef.current?.clearDecorations();
+    try { searchAddonRef.current?.clearDecorations(); } catch { /* addon may be disposed */ }
     xtermRef.current?.focus();
   }, []);
 
   const findNext = useCallback(() => {
     if (searchQuery && searchAddonRef.current) {
-      searchAddonRef.current.findNext(searchQuery, { regex: false, caseSensitive: false, incremental: true });
+      try {
+        searchAddonRef.current.findNext(searchQuery, { regex: false, caseSensitive: false, incremental: true });
+      } catch { /* SearchAddon can fail on malformed input */ }
     }
   }, [searchQuery]);
 
   const findPrevious = useCallback(() => {
     if (searchQuery && searchAddonRef.current) {
-      searchAddonRef.current.findPrevious(searchQuery, { regex: false, caseSensitive: false, incremental: true });
+      try {
+        searchAddonRef.current.findPrevious(searchQuery, { regex: false, caseSensitive: false, incremental: true });
+      } catch { /* SearchAddon can fail on malformed input */ }
     }
   }, [searchQuery]);
 
-  // Auto-search as user types
+  // Auto-search as user types (inline call to avoid findNext in dep array → loop risk)
   useEffect(() => {
-    if (searchVisible && searchQuery) findNext();
-  }, [searchQuery, searchVisible, findNext]);
+    if (searchVisible && searchQuery && searchAddonRef.current) {
+      try {
+        searchAddonRef.current.findNext(searchQuery, { regex: false, caseSensitive: false, incremental: true });
+      } catch { /* ignore */ }
+    }
+  }, [searchQuery, searchVisible]);
 
   // Blur terminal when virtual keyboard is shown to prevent mobile keyboard
   // and refit terminal when keyboard visibility changes
@@ -335,18 +342,17 @@ export function TerminalView({
         if ((event.metaKey || event.ctrlKey) && event.key === 'c' && event.type === 'keydown') {
           if (term.hasSelection()) {
             const selection = term.getSelection();
-            if (selection) navigator.clipboard.writeText(selection);
+            if (selection) {
+              // Try clipboard write; if it fails (permissions), fall through to SIGINT
+              navigator.clipboard.writeText(selection).catch(() => {});
+            }
             term.clearSelection();
             return false; // prevent xterm from sending ^C
           }
         }
         // Cmd/Ctrl+Shift+F: open search
         if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key === 'F' && event.type === 'keydown') {
-          // setState inside a keyhandler — defer to avoid React batching issues
-          setTimeout(() => {
-            setSearchVisible(true);
-            setTimeout(() => searchInputRef.current?.focus(), 0);
-          }, 0);
+          setTimeout(() => openSearch(), 0);
           return false;
         }
         return true;
@@ -380,18 +386,18 @@ export function TerminalView({
         }
       });
 
-      // Track scroll position for scroll-to-bottom button
-      term.onScroll(() => {
-        const buffer = term.buffer.active;
-        setIsAtBottom(buffer.viewportY >= buffer.baseY);
-      });
-      // Also reset when new data arrives and user is at bottom
-      term.onWriteParsed(() => {
-        const buffer = term.buffer.active;
-        if (buffer.viewportY >= buffer.baseY - 1) {
-          setIsAtBottom(true);
-        }
-      });
+      // Track scroll position for scroll-to-bottom button (throttled via rAF)
+      let scrollRaf: number | null = null;
+      const updateScrollPosition = () => {
+        if (scrollRaf) return; // already scheduled
+        scrollRaf = requestAnimationFrame(() => {
+          const buffer = term.buffer.active;
+          setIsAtBottom(buffer.viewportY >= buffer.baseY);
+          scrollRaf = null;
+        });
+      };
+      term.onScroll(updateScrollPosition);
+      term.onWriteParsed(updateScrollPosition);
 
       // Debounced resize handler with double-fit
       const handleResize = () => {
@@ -463,7 +469,7 @@ export function TerminalView({
         reconnectTimerRef.current = null;
       }
       wsRef.current?.close();
-      cleanup.then((fn) => fn?.());
+      cleanup.then((fn) => fn?.()).catch(() => { /* ignore cleanup errors on unmount */ });
     };
     // theme intentionally excluded — handled by separate effect
     // eslint-disable-next-line react-hooks/exhaustive-deps
