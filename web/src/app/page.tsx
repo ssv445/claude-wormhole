@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, CSSProperties } from 'react';
 import { SessionList } from '@/components/SessionList';
 import { TerminalView } from '@/components/TerminalView';
 import { NewSessionDialog } from '@/components/NewSessionDialog';
@@ -45,6 +45,18 @@ export default function Home() {
   const { theme, toggle: toggleTheme } = useTheme();
   const { isFullscreen, toggle: toggleFullscreen, isIOS, isPWA } = useFullscreen();
   const [showIOSHint, setShowIOSHint] = useState(false);
+  const [nativeKeyboardHeight, setNativeKeyboardHeight] = useState(0);
+
+  // Detect native mobile keyboard via visualViewport — shrink entire app container
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    function onResize() {
+      setNativeKeyboardHeight(Math.max(0, Math.round(window.innerHeight - vv!.height)));
+    }
+    vv.addEventListener('resize', onResize);
+    return () => vv.removeEventListener('resize', onResize);
+  }, []);
 
   // Sync URL → session on mount
   useEffect(() => {
@@ -174,15 +186,22 @@ export default function Home() {
           onRefresh={() => setRefreshKey((k) => k + 1)}
         />
       </div>
-      {/* Build version */}
-      <div className="px-4 py-2 border-t border-border text-[10px] text-muted font-mono">
-        v1.0.0 · {process.env.NEXT_PUBLIC_GIT_HASH ?? 'dev'}
-      </div>
+      {/* Build version — tap to force reload */}
+      <button
+        onClick={() => window.location.reload()}
+        className="w-full px-4 py-2 border-t border-border text-[10px] text-muted font-mono text-left hover:text-secondary transition-colors"
+        title="Force reload"
+      >
+        v1.0.0 · {process.env.NEXT_PUBLIC_GIT_HASH ?? 'dev'} ↻
+      </button>
     </>
   );
 
   return (
-    <div className="h-dvh flex">
+    <div
+      className="h-dvh flex"
+      style={nativeKeyboardHeight > 0 ? { height: `calc(100dvh - ${nativeKeyboardHeight}px)` } as CSSProperties : undefined}
+    >
       {/* Desktop sidebar — always visible */}
       <div className="hidden md:flex md:flex-col md:w-56 md:shrink-0 bg-surface border-r border-border">
         {sidebar}

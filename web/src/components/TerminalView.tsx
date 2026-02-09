@@ -113,27 +113,10 @@ export function TerminalView({
 
   // Keyboard state
   const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const [clipboardStatus, setClipboardStatus] = useState<{ copy?: string; paste?: string }>({});
-  const [nativeKeyboardHeight, setNativeKeyboardHeight] = useState(0);
+  const [termReady, setTermReady] = useState(false);
 
   const sendKey = useCallback((key: string) => {
     wsRef.current?.send(key);
-  }, []);
-
-  const handleCopy = useCallback(async () => {
-    const selection = xtermRef.current?.getSelection();
-    if (!selection) {
-      setClipboardStatus({ copy: 'No selection' });
-      setTimeout(() => setClipboardStatus((s) => ({ ...s, copy: undefined })), 1500);
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(selection);
-      setClipboardStatus({ copy: 'Copied!' });
-    } catch {
-      setClipboardStatus({ copy: 'Failed' });
-    }
-    setTimeout(() => setClipboardStatus((s) => ({ ...s, copy: undefined })), 1500);
   }, []);
 
   const handlePaste = useCallback(async () => {
@@ -141,14 +124,10 @@ export function TerminalView({
       const text = await navigator.clipboard.readText();
       if (text && wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(text);
-        setClipboardStatus({ paste: 'Pasted!' });
-      } else {
-        setClipboardStatus({ paste: 'Empty' });
       }
     } catch {
-      setClipboardStatus({ paste: 'Failed' });
+      // clipboard access denied or empty
     }
-    setTimeout(() => setClipboardStatus((s) => ({ ...s, paste: undefined })), 1500);
   }, []);
 
   // Blur terminal when virtual keyboard is shown to prevent mobile keyboard
@@ -163,24 +142,16 @@ export function TerminalView({
     }
   }, [keyboardVisible]);
 
-  // Detect native mobile keyboard via visualViewport and refit terminal
+  // ResizeObserver on terminal container — fires on keyboard open/close, window resize, VK toggle
   useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-
-    function onViewportResize() {
-      // Keyboard height = difference between window and visual viewport
-      const kbHeight = Math.max(0, Math.round(window.innerHeight - vv!.height));
-      setNativeKeyboardHeight(kbHeight);
-      // Refit terminal to new available space
-      if (fitAddonRef.current) {
-        requestAnimationFrame(() => fitAddonRef.current?.fit());
-      }
-    }
-
-    vv.addEventListener('resize', onViewportResize);
-    return () => vv.removeEventListener('resize', onViewportResize);
-  }, []);
+    const el = termRef.current;
+    if (!el || !termReady) return;
+    const ro = new ResizeObserver(() => {
+      requestAnimationFrame(() => fitAddonRef.current?.fit());
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [termReady]);
 
   // Update xterm theme when theme prop changes
   useEffect(() => {
@@ -199,7 +170,6 @@ export function TerminalView({
 
   useEffect(() => {
     let disposed = false;
-    let windowResizeHandler: (() => void) | null = null;
     intentionalCloseRef.current = false;
 
     function connectWebSocket(term: import('@xterm/xterm').Terminal) {
@@ -273,6 +243,7 @@ export function TerminalView({
       fitAddon.fit();
       xtermRef.current = term;
       fitAddonRef.current = fitAddon;
+      setTermReady(true);
 
       // Desktop copy/paste: Cmd+C/Ctrl+C copies selection (or sends SIGINT if no selection),
       // Cmd+V/Ctrl+V pastes from clipboard
@@ -337,8 +308,8 @@ export function TerminalView({
         const events = Math.trunc(touchAccumulator / scrollSensitivity);
         if (events !== 0) {
           // SGR mouse wheel: 64 = wheel up (scroll back), 65 = wheel down (scroll forward)
-          // Positive deltaY = finger moved up = scroll back (older content)
-          const btn = events > 0 ? 64 : 65;
+          // Natural scroll: finger swipe up (positive deltaY) = scroll forward (newer content)
+          const btn = events > 0 ? 65 : 64;
           const count = Math.abs(events);
           for (let i = 0; i < count; i++) {
             wsRef.current.send(`\x1b[<${btn};1;1M`);
@@ -371,14 +342,6 @@ export function TerminalView({
         }
       });
 
-      windowResizeHandler = () => {
-        fitAddon.fit();
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-          wsRef.current.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-        }
-      };
-      window.addEventListener('resize', windowResizeHandler);
-
       // Expose connect function for manual reconnect and visibilitychange
       connectRef.current = () => {
         if (reconnectTimerRef.current) {
@@ -403,7 +366,6 @@ export function TerminalView({
 
       return () => {
         document.removeEventListener('visibilitychange', handleVisibilityChange);
-        if (windowResizeHandler) window.removeEventListener('resize', windowResizeHandler);
         termContainer.removeEventListener('touchstart', onTouchStart, { capture: true });
         termContainer.removeEventListener('touchmove', onTouchMove, { capture: true });
         termContainer.removeEventListener('touchend', onTouchEnd, { capture: true });
@@ -435,20 +397,15 @@ export function TerminalView({
 
   return (
     <div
-      className="flex flex-col"
+      className="flex flex-col flex-1 min-h-0"
       style={{
         display: visible ? 'flex' : 'none',
         backgroundColor: XTERM_THEMES[theme].background,
-        // Shrink container when native mobile keyboard is open so input stays visible
-        height: nativeKeyboardHeight > 0 ? `calc(100dvh - ${nativeKeyboardHeight}px)` : '100dvh',
       }}
     >
       {/* Terminal + reconnect overlay */}
       <div
         className="flex-1 overflow-hidden relative"
-        style={{
-          maxHeight: keyboardVisible ? 'calc(100vh - 320px)' : '100%',
-        }}
       >
         <div
           ref={termRef}
@@ -459,6 +416,28 @@ export function TerminalView({
             }
           }}
         />
+
+        {/* Scroll FAB - Mobile only, 90% transparent, middle-right */}
+        <div className="absolute top-1/2 -translate-y-1/2 right-2 z-10 flex flex-col gap-1 md:hidden" style={{ opacity: 0.1 }}>
+          <button
+            onClick={() => { sendKey('\x02['); setTimeout(() => sendKey('\x1b[5~'), 100); }}
+            className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center active:opacity-100"
+            title="Scroll up (tmux)"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="black" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" />
+            </svg>
+          </button>
+          <button
+            onClick={() => sendKey('\x1b[6~')}
+            className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center active:opacity-100"
+            title="Scroll down (tmux)"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="black" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
 
         {/* Reconnection overlay */}
         {(connectionState === 'reconnecting' || connectionState === 'failed') && (
@@ -487,83 +466,7 @@ export function TerminalView({
         )}
       </div>
 
-      {/* Floating buttons - Mobile only */}
-      <div
-        className="fixed right-3 top-12 flex flex-col gap-2 z-50 md:hidden"
-      >
-        {/* Paste */}
-        <button
-          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); handlePaste(); }}
-          className="w-10 h-10 rounded-full bg-gray-700/80 text-white shadow-lg flex items-center justify-center active:scale-95 active:bg-gray-600"
-          title="Paste clipboard"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-          </svg>
-        </button>
-
-        {/* Enter — Lucide corner-down-left (↵) */}
-        <button
-          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); sendKey('\r'); }}
-          className="w-10 h-10 rounded-full bg-gray-700/80 text-white shadow-lg flex items-center justify-center active:scale-95 active:bg-gray-600"
-          title="Enter"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-            <polyline points="9 10 4 15 9 20" />
-            <path d="M20 4v7a4 4 0 01-4 4H4" />
-          </svg>
-        </button>
-
-        {/* Scroll up/down split button */}
-        <div className="w-10 rounded-full bg-gray-700/80 shadow-lg overflow-hidden flex flex-col divide-y divide-gray-600/50">
-          {/* Scroll up — Ctrl-B [ to enter tmux copy mode, then PgUp */}
-          <button
-            onClick={() => {
-              sendKey('\x02[');
-              setTimeout(() => sendKey('\x1b[5~'), 100);
-            }}
-            className="h-10 flex items-center justify-center text-white active:bg-gray-600"
-            title="Scroll up"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" />
-            </svg>
-          </button>
-          {/* Scroll down — PgDn */}
-          <button
-            onClick={() => sendKey('\x1b[6~')}
-            className="h-10 flex items-center justify-center text-white active:bg-gray-600"
-            title="Scroll down"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Keyboard toggle — Lucide keyboard icon */}
-        <button
-          onClick={() => setKeyboardVisible(!keyboardVisible)}
-          className="w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg flex items-center justify-center active:scale-95"
-          title={keyboardVisible ? 'Hide keyboard' : 'Show keyboard'}
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-            {keyboardVisible ? (
-              <>
-                <path d="M6 18L18 6M6 6l12 12" strokeWidth={2} />
-              </>
-            ) : (
-              <>
-                <rect x="2" y="4" width="20" height="16" rx="2" />
-                <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01" strokeWidth={2} strokeLinecap="round" />
-                <path d="M7 16h10" />
-              </>
-            )}
-          </svg>
-        </button>
-      </div>
-
-      {/* Fixed bottom keyboard - Mobile only */}
+      {/* Virtual keyboard - Mobile only */}
       {keyboardVisible && (
         <div className="flex flex-col border-t border-border bg-surface shrink-0 md:hidden">
           {/* Keyboard header */}
@@ -581,29 +484,6 @@ export function TerminalView({
 
           {/* Keyboard sections - scrollable container */}
           <div className="flex flex-col gap-2 px-2 py-2 overflow-y-auto max-h-72">
-            {/* Clipboard section — custom handlers, not part of KEYBOARD_SECTIONS */}
-            <div className="flex flex-col gap-1">
-              <div className="text-[10px] text-muted font-semibold uppercase tracking-wider px-1">
-                Clipboard
-              </div>
-              <div className="flex gap-1">
-                <button
-                  onClick={handleCopy}
-                  title="Copy terminal selection to clipboard"
-                  className="px-2.5 py-1.5 min-w-[44px] rounded text-xs font-mono shrink-0 transition-colors border border-blue-500/40 bg-input-bg hover:bg-surface-hover text-blue-400 active:bg-blue-700 active:text-white"
-                >
-                  {clipboardStatus.copy ?? 'Copy'}
-                </button>
-                <button
-                  onClick={handlePaste}
-                  title="Paste clipboard into terminal"
-                  className="px-2.5 py-1.5 min-w-[44px] rounded text-xs font-mono shrink-0 transition-colors border border-blue-500/40 bg-input-bg hover:bg-surface-hover text-blue-400 active:bg-blue-700 active:text-white"
-                >
-                  {clipboardStatus.paste ?? 'Paste'}
-                </button>
-              </div>
-            </div>
-
             {KEYBOARD_SECTIONS.map((section) => (
               <div key={section.title} className="flex flex-col gap-1">
                 {/* Section label */}
@@ -628,6 +508,69 @@ export function TerminalView({
           </div>
         </div>
       )}
+
+      {/* Bottom bar - Mobile only: Paste | ↑ | Keyboard | ↓ | Enter */}
+      <div className="shrink-0 md:hidden h-11 bg-gray-900/90 backdrop-blur-sm border-t border-gray-700/50 flex items-center justify-around">
+        {/* Paste */}
+        <button
+          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); handlePaste(); }}
+          className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
+          title="Paste"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+            <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+        </button>
+        {/* Arrow Up */}
+        <button
+          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); sendKey('\x1b[A'); }}
+          className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
+          title="Up arrow"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" />
+          </svg>
+        </button>
+        {/* Keyboard toggle */}
+        <button
+          onClick={() => setKeyboardVisible(!keyboardVisible)}
+          className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
+          title={keyboardVisible ? 'Hide keyboard' : 'Show keyboard'}
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+            {keyboardVisible ? (
+              <path d="M6 18L18 6M6 6l12 12" strokeWidth={2} />
+            ) : (
+              <>
+                <rect x="2" y="4" width="20" height="16" rx="2" />
+                <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01" strokeWidth={2} strokeLinecap="round" />
+                <path d="M7 16h10" />
+              </>
+            )}
+          </svg>
+        </button>
+        {/* Arrow Down */}
+        <button
+          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); sendKey('\x1b[B'); }}
+          className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
+          title="Down arrow"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {/* Enter */}
+        <button
+          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); sendKey('\r'); }}
+          className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
+          title="Enter"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+            <polyline points="9 10 4 15 9 20" />
+            <path d="M20 4v7a4 4 0 01-4 4H4" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }
