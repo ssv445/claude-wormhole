@@ -64,7 +64,7 @@ app.prepare().then(() => {
 
     let ptyProcess: ReturnType<typeof pty.spawn>;
     try {
-      ptyProcess = pty.spawn(TMUX_PATH, ['attach-session', '-t', session], {
+      ptyProcess = pty.spawn(TMUX_PATH, ['-u', 'attach-session', '-t', session], {
         name: 'xterm-256color',
         cols: 80,
         rows: 24,

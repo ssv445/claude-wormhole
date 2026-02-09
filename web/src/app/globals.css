@@ -1,5 +1,24 @@
 @import 'tailwindcss';
 
+/* JetBrains Mono Nerd Font — bundled so mobile devices get proper glyphs.
+   font-display: block prevents xterm.js canvas renderer from measuring
+   with a fallback font and then misaligning once the real font loads. */
+@font-face {
+  font-family: 'JetBrains Mono NF';
+  src: url('/fonts/JetBrainsMonoNF-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono NF';
+  src: url('/fonts/JetBrainsMonoNF-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+
 @theme {
   --color-surface: #18181b;
   --color-surface-alt: #09090b;

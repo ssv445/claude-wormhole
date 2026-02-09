@@ -234,22 +234,34 @@ export function TerminalView({
       const { Terminal } = await import('@xterm/xterm');
       const { FitAddon } = await import('@xterm/addon-fit');
       const { WebLinksAddon } = await import('@xterm/addon-web-links');
+      const { Unicode11Addon } = await import('@xterm/addon-unicode11');
 
       if (disposed || !termRef.current) return;
 
-      // Smaller font on mobile to get ~50+ columns (vs ~35-40 at 14px)
-      // Prevents Claude Code's TUI messages from wrapping into vertical garbage
+      // Wait for Nerd Font to load before opening terminal — xterm.js
+      // canvas renderer measures char widths at open() time. If the font
+      // isn't ready, measurements use a fallback font and glyphs misalign.
+      await document.fonts.load('14px "JetBrains Mono NF"');
+
+      // 10px on mobile gets ~62 cols on 390px screen (vs ~56 at 11px)
+      // Claude Code status bar needs ~75 chars but 62 is the practical max
       const isMobile = window.innerWidth < 768;
       const term = new Terminal({
         cursorBlink: true,
-        fontSize: isMobile ? 11 : 14,
-        fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace',
+        fontSize: isMobile ? 10 : 14,
+        fontFamily: '"JetBrains Mono NF", "JetBrains Mono", monospace',
         theme: XTERM_THEMES[theme],
+        allowProposedApi: true,
       });
 
       const fitAddon = new FitAddon();
       term.loadAddon(fitAddon);
       term.loadAddon(new WebLinksAddon());
+      // Unicode11 gives xterm.js proper width tables for symbols like ⏺ ❯ ⏵ ✳
+      // Without it, these chars render as _ because xterm can't determine their width
+      const unicodeAddon = new Unicode11Addon();
+      term.loadAddon(unicodeAddon);
+      term.unicode.activeVersion = '11';
       term.open(termRef.current);
       fitAddon.fit();
       xtermRef.current = term;
