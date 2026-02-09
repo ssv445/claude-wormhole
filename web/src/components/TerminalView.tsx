@@ -274,6 +274,34 @@ export function TerminalView({
       xtermRef.current = term;
       fitAddonRef.current = fitAddon;
 
+      // Desktop copy/paste: Cmd+C/Ctrl+C copies selection (or sends SIGINT if no selection),
+      // Cmd+V/Ctrl+V pastes from clipboard
+      term.attachCustomKeyEventHandler((ev) => {
+        const isMod = ev.metaKey || ev.ctrlKey;
+        if (ev.type !== 'keydown' || !isMod) return true;
+
+        if (ev.key === 'c') {
+          const sel = term.getSelection();
+          if (sel) {
+            navigator.clipboard.writeText(sel);
+            term.clearSelection();
+            return false; // prevent xterm from sending \x03
+          }
+          return true; // no selection — let \x03 (SIGINT) through
+        }
+
+        if (ev.key === 'v') {
+          navigator.clipboard.readText().then((text) => {
+            if (text && wsRef.current?.readyState === WebSocket.OPEN) {
+              wsRef.current.send(text);
+            }
+          });
+          return false;
+        }
+
+        return true;
+      });
+
       // Touch-to-scroll: send mouse wheel escape sequences to tmux.
       // With `mouse on`, tmux enters copy mode on scroll up automatically.
       // SGR mouse encoding (mode 1006): \x1b[<64;col;rowM = wheel up,
@@ -303,15 +331,14 @@ export function TerminalView({
         }
         touchScrolling = true;
         e.preventDefault();
-        e.stopPropagation();
 
         // Accumulate delta and send mouse wheel events
         touchAccumulator += deltaY;
         const events = Math.trunc(touchAccumulator / scrollSensitivity);
         if (events !== 0) {
-          // SGR mouse wheel: 64 = up, 65 = down
-          // Positive deltaY = finger moved up = scroll up (older content)
-          const btn = events > 0 ? 65 : 64;
+          // SGR mouse wheel: 64 = wheel up (scroll back), 65 = wheel down (scroll forward)
+          // Positive deltaY = finger moved up = scroll back (older content)
+          const btn = events > 0 ? 64 : 65;
           const count = Math.abs(events);
           for (let i = 0; i < count; i++) {
             wsRef.current.send(`\x1b[<${btn};1;1M`);
@@ -462,46 +489,75 @@ export function TerminalView({
 
       {/* Floating buttons - Mobile only */}
       <div
-        className="fixed right-4 flex flex-col gap-2 z-50 md:hidden transition-all"
-        style={{ bottom: keyboardVisible ? '324px' : '16px' }}
+        className="fixed right-3 top-12 flex flex-col gap-2 z-50 md:hidden"
       >
-        {/* Scroll up — Ctrl-B [ to enter tmux copy mode, then PgUp */}
+        {/* Paste */}
         <button
-          onClick={() => {
-            // Enter tmux copy mode (prefix + [), then page up
-            sendKey('\x02[');
-            setTimeout(() => sendKey('\x1b[5~'), 100);
-          }}
+          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); handlePaste(); }}
           className="w-10 h-10 rounded-full bg-gray-700/80 text-white shadow-lg flex items-center justify-center active:scale-95 active:bg-gray-600"
-          title="Scroll up"
+          title="Paste clipboard"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
           </svg>
         </button>
 
-        {/* Scroll down — PgDn if already in copy mode, or just send PgDn */}
+        {/* Enter — Lucide corner-down-left (↵) */}
         <button
-          onClick={() => sendKey('\x1b[6~')}
+          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); sendKey('\r'); }}
           className="w-10 h-10 rounded-full bg-gray-700/80 text-white shadow-lg flex items-center justify-center active:scale-95 active:bg-gray-600"
-          title="Scroll down"
+          title="Enter"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+            <polyline points="9 10 4 15 9 20" />
+            <path d="M20 4v7a4 4 0 01-4 4H4" />
           </svg>
         </button>
 
-        {/* Keyboard toggle */}
+        {/* Scroll up/down split button */}
+        <div className="w-10 rounded-full bg-gray-700/80 shadow-lg overflow-hidden flex flex-col divide-y divide-gray-600/50">
+          {/* Scroll up — Ctrl-B [ to enter tmux copy mode, then PgUp */}
+          <button
+            onClick={() => {
+              sendKey('\x02[');
+              setTimeout(() => sendKey('\x1b[5~'), 100);
+            }}
+            className="h-10 flex items-center justify-center text-white active:bg-gray-600"
+            title="Scroll up"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" />
+            </svg>
+          </button>
+          {/* Scroll down — PgDn */}
+          <button
+            onClick={() => sendKey('\x1b[6~')}
+            className="h-10 flex items-center justify-center text-white active:bg-gray-600"
+            title="Scroll down"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Keyboard toggle — Lucide keyboard icon */}
         <button
           onClick={() => setKeyboardVisible(!keyboardVisible)}
           className="w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg flex items-center justify-center active:scale-95"
           title={keyboardVisible ? 'Hide keyboard' : 'Show keyboard'}
         >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
             {keyboardVisible ? (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              <>
+                <path d="M6 18L18 6M6 6l12 12" strokeWidth={2} />
+              </>
             ) : (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+              <>
+                <rect x="2" y="4" width="20" height="16" rx="2" />
+                <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01" strokeWidth={2} strokeLinecap="round" />
+                <path d="M7 16h10" />
+              </>
             )}
           </svg>
         </button>
