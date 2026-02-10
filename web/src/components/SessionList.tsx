@@ -18,6 +18,7 @@ export function SessionList({
   onAttach,
   onDetach,
   onRefresh,
+  onNewInDir,
 }: {
   refreshKey: number;
   openTabs: string[];
@@ -25,6 +26,7 @@ export function SessionList({
   onAttach: (name: string) => void;
   onDetach: (name: string) => void;
   onRefresh: () => void;
+  onNewInDir?: (workingDir: string) => void;
 }) {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,6 +71,7 @@ export function SessionList({
     const now = Date.now();
     const match = activity.match(/^(\d+)([smhd])/);
 
+    if (activity === 'just now') return new Date(now);
     if (!match) return new Date(0);
 
     const value = parseInt(match[1]);
@@ -107,7 +110,9 @@ export function SessionList({
 
     groups.forEach((groupSessions, dir) => {
       // Sort sessions within group by name
-      const sortedSessions = [...groupSessions].sort((a, b) => a.name.localeCompare(b.name));
+      const sortedSessions = [...groupSessions].sort((a, b) =>
+        parseActivityTime(b.lastActivity).getTime() - parseActivityTime(a.lastActivity).getTime()
+      );
 
       // Find most recent activity in this group
       const mostRecent = groupSessions.reduce((latest, session) => {
@@ -188,8 +193,15 @@ export function SessionList({
           <div className="space-y-2">
             {attachedGroups.map(group => (
               <div key={group.dir}>
-                <div className="text-xs text-muted px-2 mb-1 font-mono">
-                  {group.dir}
+                <div className="flex items-center justify-between text-xs text-muted px-2 mb-1">
+                  <span className="font-mono truncate">{group.dir}</span>
+                  {onNewInDir && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onNewInDir(group.dir); }}
+                      className="text-muted hover:text-primary shrink-0 ml-1"
+                      title="New session in this folder"
+                    >+</button>
+                  )}
                 </div>
                 <div className="space-y-1">
                   {group.sessions.map(renderSession)}
@@ -209,8 +221,15 @@ export function SessionList({
           <div className="space-y-2">
             {availableGroups.map(group => (
               <div key={group.dir}>
-                <div className="text-xs text-muted px-2 mb-1 font-mono">
-                  {group.dir}
+                <div className="flex items-center justify-between text-xs text-muted px-2 mb-1">
+                  <span className="font-mono truncate">{group.dir}</span>
+                  {onNewInDir && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onNewInDir(group.dir); }}
+                      className="text-muted hover:text-primary shrink-0 ml-1"
+                      title="New session in this folder"
+                    >+</button>
+                  )}
                 </div>
                 <div className="space-y-1">
                   {group.sessions.map(renderSession)}

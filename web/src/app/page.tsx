@@ -40,6 +40,7 @@ export default function Home() {
   const [openTabs, setOpenTabs] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [showNewDialog, setShowNewDialog] = useState(false);
+  const [newSessionDir, setNewSessionDir] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const { theme, toggle: toggleTheme } = useTheme();
@@ -184,6 +185,7 @@ export default function Home() {
           onAttach={attachSession}
           onDetach={detachSession}
           onRefresh={() => setRefreshKey((k) => k + 1)}
+          onNewInDir={(dir) => { setNewSessionDir(dir); setShowNewDialog(true); }}
         />
       </div>
       {/* Build version — tap to force reload */}
@@ -307,9 +309,11 @@ export default function Home() {
 
       {showNewDialog && (
         <NewSessionDialog
-          onClose={() => setShowNewDialog(false)}
+          initialDir={newSessionDir}
+          onClose={() => { setShowNewDialog(false); setNewSessionDir(''); }}
           onCreated={(name) => {
             setShowNewDialog(false);
+            setNewSessionDir('');
             setRefreshKey((k) => k + 1);
             attachSession(name);
           }}

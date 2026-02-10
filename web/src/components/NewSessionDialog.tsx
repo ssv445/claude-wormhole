@@ -7,12 +7,14 @@ const SESSION_NAME_RE = /^[a-zA-Z0-9_-]+$/;
 export function NewSessionDialog({
   onClose,
   onCreated,
+  initialDir,
 }: {
   onClose: () => void;
   onCreated: (name: string) => void;
+  initialDir?: string;
 }) {
   const [name, setName] = useState('');
-  const [dir, setDir] = useState('');
+  const [dir, setDir] = useState(initialDir ?? '');
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
 
