@@ -95,11 +95,22 @@ app.prepare().then(() => {
       }
     });
 
-    ptyProcess.onExit(({ exitCode }: { exitCode: number }) => {
-      console.log(`PTY exited for session: ${session}, code: ${exitCode}`);
-      if (ws.readyState === WebSocket.OPEN) {
+    // Track cleanup state to avoid double-destroy
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      clearInterval(heartbeat);
+      try { ptyProcess.destroy(); } catch { /* already dead */ }
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
         ws.close();
       }
+      console.log(`Cleaned up PTY for session: ${session}`);
+    };
+
+    ptyProcess.onExit(({ exitCode }: { exitCode: number }) => {
+      console.log(`PTY exited for session: ${session}, code: ${exitCode}`);
+      cleanup();
     });
 
     // WebSocket → PTY
@@ -122,9 +133,10 @@ app.prepare().then(() => {
       ptyProcess.write(str);
     });
 
-    ws.on('close', () => {
-      clearInterval(heartbeat);
-      ptyProcess.kill();
+    ws.on('close', cleanup);
+    ws.on('error', (err) => {
+      console.error(`WebSocket error for session: ${session}:`, err.message);
+      cleanup();
     });
   });
 
