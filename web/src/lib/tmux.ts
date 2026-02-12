@@ -12,6 +12,9 @@ function validateSessionName(name: string): string {
   return name;
 }
 
+// Claude Code state detected from tmux pane content
+export type ClaudeHint = 'idle' | 'busy' | null;
+
 export interface SessionInfo {
   name: string;
   windows: number;
@@ -19,6 +22,7 @@ export interface SessionInfo {
   created: string;
   workingDir: string;
   lastActivity: string;
+  claudeHint: ClaudeHint;
 }
 
 export async function listSessionsWithInfo(): Promise<SessionInfo[]> {
@@ -45,10 +49,11 @@ export async function listSessionsWithInfo(): Promise<SessionInfo[]> {
           lastActivity: activity
             ? formatLastActivity(parseInt(activity, 10))
             : '',
+          claudeHint: null as ClaudeHint,
         };
       });
 
-    // Get current pane path for each session (more accurate)
+    // Get current pane path and Claude hint for each session
     for (const session of sessions) {
       try {
         const { stdout: pathOut } = await execFileAsync('tmux', [
@@ -61,6 +66,20 @@ export async function listSessionsWithInfo(): Promise<SessionInfo[]> {
         session.workingDir = pathOut.trim();
       } catch {
         // keep session_path as fallback
+      }
+
+      // Detect Claude Code state by checking pane content for the ❯ prompt
+      if (session.attached) {
+        try {
+          const { stdout: paneContent } = await execFileAsync('tmux', [
+            'capture-pane', '-t', session.name, '-p',
+          ]);
+          const lines = paneContent.trimEnd().split('\n');
+          const lastLines = lines.slice(-5).join('');
+          session.claudeHint = lastLines.includes('❯') ? 'idle' : 'busy';
+        } catch {
+          // can't read pane
+        }
       }
     }
 

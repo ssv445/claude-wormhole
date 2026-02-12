@@ -9,6 +9,7 @@ interface SessionInfo {
   created: string;
   workingDir: string;
   lastActivity: string;
+  claudeHint: 'idle' | 'busy' | null;
 }
 
 export function SessionList({
@@ -182,7 +183,13 @@ export function SessionList({
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOpen ? 'bg-green-400' : 'bg-muted'}`} />
             <span className="font-mono text-sm truncate">{s.name}</span>
           </div>
-          <div className="text-xs text-muted ml-3 truncate">
+          <div className="text-xs text-muted ml-3 truncate flex items-center gap-1.5">
+            {s.claudeHint === 'idle' && (
+              <span className="text-yellow-400" title="Waiting for input">waiting</span>
+            )}
+            {s.claudeHint === 'busy' && (
+              <span className="text-green-400 animate-pulse" title="Working">busy</span>
+            )}
             {s.lastActivity}
           </div>
         </div>

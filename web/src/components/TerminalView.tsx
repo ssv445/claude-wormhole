@@ -10,8 +10,8 @@ const KEYBOARD_SECTIONS = [
     title: 'Quick Access',
     keys: [
       { label: 'Esc', key: '\x1b', desc: 'Escape/Cancel' },
-      { label: 'Tab', key: '\t', desc: 'Tab/Autocomplete' },
       { label: 'S+Tab', key: '\x1b[Z', desc: 'Toggle mode' },
+      { label: 'Tab', key: '\t', desc: 'Tab/Autocomplete' },
       { label: '^C', key: '\x03', desc: 'Interrupt' },
       { label: '^D', key: '\x04', desc: 'Exit session' },
       { label: '^L', key: '\x0c', desc: 'Clear screen' },
@@ -550,6 +550,14 @@ export function TerminalView({
 
       {/* Bottom bar - Mobile only: Paste | ↑ | Keyboard | ↓ | Enter */}
       <div className="shrink-0 md:hidden h-11 bg-gray-900/90 backdrop-blur-sm border-t border-gray-700/50 flex items-center justify-around">
+        {/* Escape */}
+        <button
+          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); sendKey('\x1b'); }}
+          className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
+          title="Escape"
+        >
+          <span className="text-xs font-mono font-bold">Esc</span>
+        </button>
         {/* Paste — uses onClick (not onPointerDown) so iOS recognizes the user gesture for clipboard */}
         <button
           onClick={handlePaste}
@@ -569,17 +577,6 @@ export function TerminalView({
           <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
             <path d="M12 4v16" />
             <path d="M8 4h8M8 20h8" />
-          </svg>
-        </button>
-        {/* Tab */}
-        <button
-          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); sendKey('\t'); }}
-          className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
-          title="Tab / Autocomplete"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-            <path d="M4 6l6 6-6 6" />
-            <path d="M14 6v12" />
           </svg>
         </button>
         {/* Arrow Up */}
