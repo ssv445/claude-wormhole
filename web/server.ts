@@ -1,4 +1,5 @@
 import { createServer } from 'http';
+import { closeSync } from 'fs';
 import { parse } from 'url';
 import { execFileSync } from 'child_process';
 import next from 'next';
@@ -63,6 +64,9 @@ app.prepare().then(() => {
     }
 
     let ptyProcess: ReturnType<typeof pty.spawn>;
+    // node-pty 1.1.0 leaks the first ptmx fd it opens (the one before _fd).
+    // Track it so we can close it manually during cleanup.
+    let leakedMasterFd: number | null = null;
     try {
       ptyProcess = pty.spawn(TMUX_PATH, ['-u', 'attach-session', '-t', session], {
         name: 'xterm-256color',
@@ -71,6 +75,10 @@ app.prepare().then(() => {
         cwd: process.env.HOME,
         env,
       });
+      // node-pty opens ptmx twice: fd N (leaked) and fd N+1 (tracked as _fd)
+      if (typeof ptyProcess._fd === 'number') {
+        leakedMasterFd = ptyProcess._fd - 1;
+      }
     } catch (err) {
       console.error('Failed to spawn PTY:', err);
       ws.close(1011, 'PTY spawn failed');
@@ -101,7 +109,13 @@ app.prepare().then(() => {
       if (cleaned) return;
       cleaned = true;
       clearInterval(heartbeat);
+      try { ptyProcess.kill(); } catch { /* already dead */ }
       try { ptyProcess.destroy(); } catch { /* already dead */ }
+      // Close the leaked master ptmx fd that node-pty never cleans up
+      if (leakedMasterFd !== null) {
+        try { closeSync(leakedMasterFd); } catch { /* already closed */ }
+        leakedMasterFd = null;
+      }
       if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
         ws.close();
       }
