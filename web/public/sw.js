@@ -72,8 +72,8 @@ self.addEventListener('push', (event) => {
         badge: '/icon-192.png',
         tag,
         data: data,
-        // Only vibrate/alert if this is a new notification, not a replacement
-        renotify: existing.length === 0,
+        // Re-alert when replacing an existing notification with the same tag
+        renotify: existing.length > 0,
         vibrate: [200, 100, 200],
       });
     })
