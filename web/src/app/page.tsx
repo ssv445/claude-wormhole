@@ -120,6 +120,11 @@ export default function Home() {
     return () => navigator.serviceWorker?.removeEventListener('message', onMessage);
   }, [attachSession]);
 
+  const renameSession = useCallback((oldName: string, newName: string) => {
+    setOpenTabs((prev) => prev.map((t) => (t === oldName ? newName : t)));
+    setActiveTab((prev) => (prev === oldName ? newName : prev));
+  }, []);
+
   const detachSession = useCallback((name: string) => {
     setOpenTabs((prev) => {
       const next = prev.filter((t) => t !== name);
@@ -208,6 +213,7 @@ export default function Home() {
           onDetach={detachSession}
           onRefresh={() => setRefreshKey((k) => k + 1)}
           onNewInDir={(dir) => { setNewSessionDir(dir); setShowNewDialog(true); }}
+          onRename={renameSession}
         />
       </div>
       {/* Build version — tap to force reload */}
@@ -322,6 +328,7 @@ export default function Home() {
                   onAttach={attachSession}
                   onDetach={detachSession}
                   onRefresh={() => setRefreshKey((k) => k + 1)}
+                  onRename={renameSession}
                 />
               </div>
             </div>

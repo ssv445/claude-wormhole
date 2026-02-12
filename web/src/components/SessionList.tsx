@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 
 interface SessionInfo {
   name: string;
@@ -20,6 +20,7 @@ export function SessionList({
   onDetach,
   onRefresh,
   onNewInDir,
+  onRename,
 }: {
   refreshKey: number;
   openTabs: string[];
@@ -28,9 +29,13 @@ export function SessionList({
   onDetach: (name: string) => void;
   onRefresh: () => void;
   onNewInDir?: (workingDir: string) => void;
+  onRename?: (oldName: string, newName: string) => void;
 }) {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingSession, setEditingSession] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const editInputRef = useRef<HTMLInputElement>(null);
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -163,10 +168,33 @@ export function SessionList({
   // Sort available groups by most recent activity
   availableGroups.sort((a, b) => b.mostRecentActivity.getTime() - a.mostRecentActivity.getTime());
 
+  const commitRename = async (oldName: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === oldName || !/^[a-zA-Z0-9_-]+$/.test(trimmed)) {
+      setEditingSession(null);
+      return;
+    }
+    try {
+      const res = await fetch('/api/sessions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldName, newName: trimmed }),
+      });
+      if (res.ok) {
+        onRename?.(oldName, trimmed);
+        fetchSessions();
+      }
+    } catch {
+      // silent
+    }
+    setEditingSession(null);
+  };
+
   // Render a session item
   const renderSession = (s: SessionInfo) => {
     const isOpen = openTabs.includes(s.name);
     const isActive = s.name === activeTab;
+    const isEditing = editingSession === s.name;
 
     return (
       <div
@@ -176,12 +204,38 @@ export function SessionList({
             ? 'bg-surface-hover text-primary'
             : 'text-secondary hover:bg-surface-hover hover:text-primary'
         }`}
-        onClick={() => onAttach(s.name)}
+        onClick={() => !isEditing && onAttach(s.name)}
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOpen ? 'bg-green-400' : 'bg-muted'}`} />
-            <span className="font-mono text-sm truncate">{s.name}</span>
+            {isEditing ? (
+              <input
+                ref={editInputRef}
+                className="font-mono text-sm bg-surface border border-border rounded px-1 py-0 w-full outline-none focus:border-muted"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitRename(s.name, editValue);
+                  if (e.key === 'Escape') setEditingSession(null);
+                }}
+                onBlur={() => commitRename(s.name, editValue)}
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <span
+                className="font-mono text-sm truncate"
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  setEditingSession(s.name);
+                  setEditValue(s.name);
+                  setTimeout(() => editInputRef.current?.select(), 0);
+                }}
+                title="Double-click to rename"
+              >
+                {s.name}
+              </span>
+            )}
           </div>
           <div className="text-xs text-muted ml-3 truncate flex items-center gap-1.5">
             {s.claudeHint === 'idle' && (

@@ -101,6 +101,15 @@ export async function newSession(
   await execFileAsync('tmux', args);
 }
 
+export async function renameSession(
+  oldName: string,
+  newName: string
+): Promise<void> {
+  validateSessionName(oldName);
+  validateSessionName(newName);
+  await execFileAsync('tmux', ['rename-session', '-t', oldName, newName]);
+}
+
 export async function killSession(name: string): Promise<void> {
   validateSessionName(name);
   await execFileAsync('tmux', ['kill-session', '-t', name]);

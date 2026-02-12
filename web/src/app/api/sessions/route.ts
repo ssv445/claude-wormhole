@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { listSessionsWithInfo, newSession, killSession } from '@/lib/tmux';
+import { listSessionsWithInfo, newSession, killSession, renameSession } from '@/lib/tmux';
 
 export async function GET() {
   const sessions = await listSessionsWithInfo();
@@ -16,6 +16,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Failed to create session';
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  const { oldName, newName } = await req.json();
+  if (!oldName || !newName || typeof oldName !== 'string' || typeof newName !== 'string') {
+    return NextResponse.json({ error: 'oldName and newName are required' }, { status: 400 });
+  }
+  try {
+    await renameSession(oldName, newName);
+    return NextResponse.json({ ok: true });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Failed to rename session';
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
