@@ -12,12 +12,18 @@ export const XTERM_THEMES = {
     foreground: '#e4e4e7',
     cursor: '#e4e4e7',
     selectionBackground: '#3f3f46',
+    scrollbarSliderBackground: 'rgba(228, 228, 231, 0.2)',
+    scrollbarSliderHoverBackground: 'rgba(228, 228, 231, 0.4)',
+    scrollbarSliderActiveBackground: 'rgba(228, 228, 231, 0.5)',
   },
   light: {
     background: '#ffffff',
     foreground: '#1e1e1e',
     cursor: '#1e1e1e',
     selectionBackground: '#b4d5fe',
+    scrollbarSliderBackground: 'rgba(30, 30, 30, 0.2)',
+    scrollbarSliderHoverBackground: 'rgba(30, 30, 30, 0.4)',
+    scrollbarSliderActiveBackground: 'rgba(30, 30, 30, 0.5)',
   },
 } as const;
 

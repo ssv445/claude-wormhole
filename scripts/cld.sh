@@ -24,7 +24,12 @@ if ! command -v tmux &> /dev/null; then
 fi
 
 PROJECT_NAME=$(basename "$PWD")
-SESSIONS=$(tmux list-sessions -F "#{session_name}" 2>/dev/null | grep "^${PROJECT_NAME}" || true)
+
+# Find sessions whose working directory matches PWD
+SESSIONS=$(tmux list-sessions -F "#{session_name}" 2>/dev/null | while read -r s; do
+    dir=$(tmux display-message -p -t "$s" '#{pane_current_path}' 2>/dev/null)
+    [ "$dir" = "$PWD" ] && echo "$s"
+done || true)
 
 if [ -z "$SESSIONS" ]; then
     SESSION_NAME="$PROJECT_NAME"

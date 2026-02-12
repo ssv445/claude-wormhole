@@ -277,6 +277,21 @@ export function TerminalView({
       term.unicode.activeVersion = '11';
       term.open(termRef.current);
       fitAddon.fit();
+
+      // GPU-accelerated rendering via WebGL2 (same renderer VS Code uses).
+      // Falls back to DOM renderer if WebGL2 is unavailable (older devices).
+      try {
+        const { WebglAddon } = await import('@xterm/addon-webgl');
+        const webglAddon = new WebglAddon();
+        webglAddon.onContextLoss(() => {
+          // GPU context lost (system sleep, driver crash) — dispose and let DOM renderer take over
+          webglAddon.dispose();
+        });
+        term.loadAddon(webglAddon);
+      } catch {
+        // WebGL2 not supported — DOM renderer is the automatic fallback
+      }
+
       xtermRef.current = term;
       fitAddonRef.current = fitAddon;
       setTermReady(true);
