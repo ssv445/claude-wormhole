@@ -27,7 +27,19 @@ export function PushRegistrar() {
         const reg = await navigator.serviceWorker.register('/sw.js');
         await navigator.serviceWorker.ready;
         const existing = await reg.pushManager.getSubscription();
-        setState(existing ? 'subscribed' : 'prompt');
+        if (existing) {
+          // Re-sync subscription to server on every load.
+          // FCM/Apple tokens can rotate silently — pushing the current
+          // subscription ensures the server always has a valid endpoint.
+          fetch('/api/push/subscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(existing.toJSON()),
+          }).catch(() => {});
+          setState('subscribed');
+        } else {
+          setState('prompt');
+        }
       } catch {
         setState('unsupported');
       }
