@@ -109,8 +109,6 @@ If sessions matching the project already exist, `cld` will list them and let you
 The web app serves a terminal UI that connects to your tmux sessions via WebSocket.
 
 ```sh
-cd web/
-
 # Install dependencies
 npm install
 
@@ -200,8 +198,6 @@ Get notified on your phone when Claude finishes a task or needs input — even w
 ### Setup
 
 ```sh
-cd web/
-
 # Generate VAPID keys and save to .env.local
 npm run setup:push https://your-machine-name.tailnet-name.ts.net
 ```
@@ -313,10 +309,10 @@ The PWA runs in standalone mode (no Safari chrome) with a dark theme optimized f
 | What | Command |
 |---|---|
 | Start a Claude session | `cd ~/projects/my-app && cld` |
-| Start web server | `cd web && npm run dev` |
+| Start web server | `npm run dev` |
 | Tailscale serve | `tailscale serve --bg 3100` |
 | Stop Tailscale serve | `tailscale serve --bg off` |
-| Setup push notifications | `cd web && npm run setup:push <your-url>` |
+| Setup push notifications | `npm run setup:push <your-url>` |
 | Test push notification | `curl -X POST http://localhost:3100/api/notify -H 'Content-Type: application/json' -d '{"type":"idle","message":"test"}'` |
 | List tmux sessions | `tmux ls` |
 | Attach to session (SSH) | `tmux attach -t session-name` |

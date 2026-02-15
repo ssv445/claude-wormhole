@@ -1,1 +1,6 @@
 .playwright-mcp/*
+node_modules/
+.next/
+dist/
+.env.local
+data/

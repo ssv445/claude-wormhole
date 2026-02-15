@@ -7,7 +7,7 @@
 
     <!-- Update these paths to match your setup -->
     <key>WorkingDirectory</key>
-    <string>/Users/YOU/www/claude-wormhole/web</string>
+    <string>/Users/YOU/www/claude-wormhole</string>
 
     <key>ProgramArguments</key>
     <array>

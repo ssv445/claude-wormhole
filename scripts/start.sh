@@ -5,9 +5,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-WEB_DIR="$SCRIPT_DIR/../web"
+ROOT_DIR="$SCRIPT_DIR/.."
 
-cd "$WEB_DIR"
+cd "$ROOT_DIR"
 
 # Build if .next/ doesn't exist
 if [ ! -d ".next" ]; then

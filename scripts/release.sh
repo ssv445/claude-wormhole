@@ -5,7 +5,7 @@ set -euo pipefail
 # Usage: ./scripts/release.sh [patch|minor|major] [--dry-run]
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PACKAGE_JSON="$REPO_ROOT/web/package.json"
+PACKAGE_JSON="$REPO_ROOT/package.json"
 CHANGELOG="$REPO_ROOT/CHANGELOG.md"
 
 DRY_RUN=false
@@ -144,7 +144,7 @@ if $DRY_RUN; then
   echo "---"
   echo ""
   echo "Actions that would be taken:"
-  echo "  1. Update web/package.json version to $NEW_VERSION"
+  echo "  1. Update package.json version to $NEW_VERSION"
   echo "  2. Update CHANGELOG.md"
   echo "  3. git commit -m 'chore(release): v$NEW_VERSION'"
   echo "  4. git tag v$NEW_VERSION"
@@ -172,7 +172,7 @@ fi
 
 # Commit, tag, push
 cd "$REPO_ROOT"
-git add web/package.json CHANGELOG.md
+git add package.json CHANGELOG.md
 git commit -m "chore(release): v${NEW_VERSION}"
 git tag "v${NEW_VERSION}"
 git push origin main --tags

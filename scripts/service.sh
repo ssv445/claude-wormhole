@@ -23,7 +23,7 @@ case "${1:-}" in
   install)
     # Build first so launchd doesn't start a server with no .next/
     echo "Building web app..."
-    (cd "$SCRIPT_DIR/../web" && npm run build)
+    (cd "$SCRIPT_DIR/.." && npm run build)
 
     echo "Installing plist..."
     cp "$PLIST_SRC" "$PLIST_DST"

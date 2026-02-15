@@ -35,11 +35,11 @@ The session is the same across all channels. Start something on your desktop, ap
 
 | Path | What |
 |---|---|
-| `web/` | Next.js app + WebSocket server. node-pty spawns tmux attach, pipes I/O over ws to xterm.js |
+| `server.ts` | Custom server with node-pty + WebSocket. Pipes tmux I/O over ws to xterm.js |
+| `src/` | Next.js app pages (session list, terminal) |
+| `public/` | PWA manifest + icons |
 | `scripts/cld.sh` | CLI to launch Claude Code in tmux with `--dangerously-skip-permissions --chrome` |
 | `scripts/tmux.conf` | tmux config with resurrect + continuum for session persistence across reboots |
-| `vscode/extension/` | VS Code sidebar for tmux session management |
-| `vscode/profiles/` | Touch-optimized VS Code profile for mobile |
 
 ## Quick Start
 
@@ -53,7 +53,7 @@ cd ~/projects/my-app
 cld
 
 # 3. Start the web server
-cd web && npm install && npm run dev
+npm install && npm run dev
 
 # 4. Expose over Tailscale
 tailscale serve --bg 3100

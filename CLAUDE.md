@@ -12,10 +12,9 @@ Web-based terminal UI + CLI tooling to manage tmux sessions (especially Claude C
 
 ```
 claude-wormhole/
-├── web/                      # Next.js app + WebSocket server (port 3100)
-│   ├── server.ts             # Custom server with node-pty + ws
-│   ├── src/app/              # Next.js pages (session list, terminal)
-│   └── public/               # PWA manifest + icons
+├── server.ts                 # Custom server with node-pty + ws (port 3100)
+├── src/app/                  # Next.js pages (session list, terminal)
+├── public/                   # PWA manifest + icons
 ├── scripts/
 │   ├── cld.sh                # CLI: launch Claude Code in tmux sessions
 │   └── tmux.conf             # tmux config with resurrect + continuum
@@ -31,7 +30,7 @@ claude-wormhole/
 
 ## Key Architecture
 
-- `web/server.ts` - Custom HTTP server that upgrades WebSocket connections at `/api/terminal?session=<name>`, spawns node-pty processes that attach to tmux sessions
+- `server.ts` - Custom HTTP server that upgrades WebSocket connections at `/api/terminal?session=<name>`, spawns node-pty processes that attach to tmux sessions
 - `scripts/cld.sh` - Always passes `--dangerously-skip-permissions --chrome` to Claude Code, uses sesh for session management
 - `scripts/tmux.conf` - Includes tmux-resurrect and tmux-continuum for session persistence across reboots
 
@@ -39,10 +38,10 @@ claude-wormhole/
 
 ```sh
 # Web app
-cd web && npm run dev          # Development (port 3100)
-cd web && npm run build        # Production build
-cd web && npm start            # Production server
-cd web && ./restart.sh         # Kill → clean build → start (recommended)
+npm run dev                    # Development (port 3100)
+npm run build                  # Production build
+npm start                      # Production server
+./restart.sh                   # Kill → clean build → start (recommended)
 
 # Tailscale
 tailscale serve --bg 3100      # Expose over Tailscale HTTPS
@@ -82,6 +81,6 @@ tmux ls                        # List sessions
 - Call `fitAddon.fit()` after resize to refit terminal to the new available space.
 
 ### Server restart procedure
-- Use `web/restart.sh` — it handles kill → wait for port → clean build → start with nohup.
+- Use `./restart.sh` — it handles kill → wait for port → clean build → start with nohup.
 - `npm run dev` and `npm start` both use port 3100. Dev server child processes can linger after kill.
 - Always verify port is free before starting: `lsof -ti:3100 || echo "free"`
