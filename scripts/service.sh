@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Manage the claude-bridge launchd agent.
+# Manage the claude-wormhole launchd agent.
 #
 # Usage:
 #   ./scripts/service.sh install    # Copy plist + load
@@ -12,12 +12,12 @@
 
 set -euo pipefail
 
-LABEL="com.claude-bridge.web"
+LABEL="com.claude-wormhole.web"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PLIST_SRC="$SCRIPT_DIR/com.claude-bridge.web.plist"
+PLIST_SRC="$SCRIPT_DIR/com.claude-wormhole.web.plist"
 PLIST_DST="$HOME/Library/LaunchAgents/$LABEL.plist"
-LOG_FILE="/tmp/claude-bridge.log"
-ERR_FILE="/tmp/claude-bridge.err"
+LOG_FILE="/tmp/claude-wormhole.log"
+ERR_FILE="/tmp/claude-wormhole.err"
 
 case "${1:-}" in
   install)

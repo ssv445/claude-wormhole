@@ -142,19 +142,15 @@ export default function Home() {
       <div className="flex items-center justify-between px-4 py-4 border-b border-border">
         <h1 className="text-sm font-bold tracking-tight flex items-center gap-1.5">
           <svg className="w-5 h-5 shrink-0" viewBox="0 0 512 512" fill="none">
-            <line x1="148" y1="140" x2="148" y2="360" stroke="#da7756" strokeWidth="34" strokeLinecap="round"/>
-            <line x1="364" y1="140" x2="364" y2="360" stroke="#da7756" strokeWidth="34" strokeLinecap="round"/>
-            <path d="M148,158 Q256,280 364,158" stroke="#c4644a" strokeWidth="22" strokeLinecap="round" fill="none"/>
-            <line x1="190" y1="195" x2="190" y2="310" stroke="#c4644a" strokeWidth="10" strokeLinecap="round"/>
-            <line x1="232" y1="224" x2="232" y2="310" stroke="#c4644a" strokeWidth="10" strokeLinecap="round"/>
-            <line x1="256" y1="236" x2="256" y2="310" stroke="#c4644a" strokeWidth="10" strokeLinecap="round"/>
-            <line x1="280" y1="224" x2="280" y2="310" stroke="#c4644a" strokeWidth="10" strokeLinecap="round"/>
-            <line x1="322" y1="195" x2="322" y2="310" stroke="#c4644a" strokeWidth="10" strokeLinecap="round"/>
-            <line x1="80" y1="310" x2="432" y2="310" stroke="#da7756" strokeWidth="28" strokeLinecap="round"/>
-            <line x1="128" y1="140" x2="168" y2="140" stroke="#e8956d" strokeWidth="18" strokeLinecap="round"/>
-            <line x1="344" y1="140" x2="384" y2="140" stroke="#e8956d" strokeWidth="18" strokeLinecap="round"/>
+            <circle cx="256" cy="256" r="200" stroke="#da7756" strokeWidth="28" fill="none" opacity="0.3"/>
+            <circle cx="256" cy="256" r="145" stroke="#da7756" strokeWidth="24" fill="none" opacity="0.5"/>
+            <circle cx="256" cy="256" r="95" stroke="#da7756" strokeWidth="20" fill="none" opacity="0.7"/>
+            <circle cx="256" cy="256" r="50" stroke="#da7756" strokeWidth="18" fill="none" opacity="0.9"/>
+            <circle cx="256" cy="256" r="18" fill="#e8956d"/>
+            <path d="M256,56 Q380,140 380,256 Q380,370 256,400 Q130,370 130,256 Q130,180 200,140" stroke="#c4644a" strokeWidth="14" strokeLinecap="round" fill="none" opacity="0.6"/>
+            <path d="M256,456 Q132,372 132,256 Q132,142 256,112 Q382,142 382,256 Q382,332 312,372" stroke="#c4644a" strokeWidth="14" strokeLinecap="round" fill="none" opacity="0.6"/>
           </svg>
-          claude-bridge
+          claude-wormhole
         </h1>
         <div className="flex items-center gap-1.5">
           <button
@@ -269,19 +265,15 @@ export default function Home() {
             ) : (
               <span className="text-sm font-bold tracking-tight flex items-center gap-1.5">
                 <svg className="w-4 h-4 shrink-0" viewBox="0 0 512 512" fill="none">
-                  <line x1="148" y1="140" x2="148" y2="360" stroke="#da7756" strokeWidth="34" strokeLinecap="round"/>
-                  <line x1="364" y1="140" x2="364" y2="360" stroke="#da7756" strokeWidth="34" strokeLinecap="round"/>
-                  <path d="M148,158 Q256,280 364,158" stroke="#c4644a" strokeWidth="22" strokeLinecap="round" fill="none"/>
-                  <line x1="190" y1="195" x2="190" y2="310" stroke="#c4644a" strokeWidth="10" strokeLinecap="round"/>
-                  <line x1="232" y1="224" x2="232" y2="310" stroke="#c4644a" strokeWidth="10" strokeLinecap="round"/>
-                  <line x1="256" y1="236" x2="256" y2="310" stroke="#c4644a" strokeWidth="10" strokeLinecap="round"/>
-                  <line x1="280" y1="224" x2="280" y2="310" stroke="#c4644a" strokeWidth="10" strokeLinecap="round"/>
-                  <line x1="322" y1="195" x2="322" y2="310" stroke="#c4644a" strokeWidth="10" strokeLinecap="round"/>
-                  <line x1="80" y1="310" x2="432" y2="310" stroke="#da7756" strokeWidth="28" strokeLinecap="round"/>
-                  <line x1="128" y1="140" x2="168" y2="140" stroke="#e8956d" strokeWidth="18" strokeLinecap="round"/>
-                  <line x1="344" y1="140" x2="384" y2="140" stroke="#e8956d" strokeWidth="18" strokeLinecap="round"/>
+                  <circle cx="256" cy="256" r="200" stroke="#da7756" strokeWidth="28" fill="none" opacity="0.3"/>
+                  <circle cx="256" cy="256" r="145" stroke="#da7756" strokeWidth="24" fill="none" opacity="0.5"/>
+                  <circle cx="256" cy="256" r="95" stroke="#da7756" strokeWidth="20" fill="none" opacity="0.7"/>
+                  <circle cx="256" cy="256" r="50" stroke="#da7756" strokeWidth="18" fill="none" opacity="0.9"/>
+                  <circle cx="256" cy="256" r="18" fill="#e8956d"/>
+                  <path d="M256,56 Q380,140 380,256 Q380,370 256,400 Q130,370 130,256 Q130,180 200,140" stroke="#c4644a" strokeWidth="14" strokeLinecap="round" fill="none" opacity="0.6"/>
+                  <path d="M256,456 Q132,372 132,256 Q132,142 256,112 Q382,142 382,256 Q382,332 312,372" stroke="#c4644a" strokeWidth="14" strokeLinecap="round" fill="none" opacity="0.6"/>
                 </svg>
-                claude-bridge
+                claude-wormhole
               </span>
             )}
           </div>

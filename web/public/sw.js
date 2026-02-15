@@ -1,8 +1,8 @@
-// Service worker for claude-bridge PWA
-// v2 — bust after esbuild production build migration
+// Service worker for claude-wormhole PWA
+// v3 — bust after claude-bridge → claude-wormhole rebrand
 
 // Cache app shell on install
-const CACHE_NAME = 'claude-bridge-v2';
+const CACHE_NAME = 'claude-wormhole-v3';
 const SHELL_URLS = ['/', '/manifest.json'];
 
 self.addEventListener('install', (event) => {
@@ -51,7 +51,7 @@ self.addEventListener('fetch', (event) => {
 
 // Push notification handler
 self.addEventListener('push', (event) => {
-  let data = { title: 'Claude Bridge', body: 'Claude needs attention' };
+  let data = { title: 'Claude Wormhole', body: 'Claude needs attention' };
 
   if (event.data) {
     try {
@@ -61,7 +61,7 @@ self.addEventListener('push', (event) => {
     }
   }
 
-  const tag = data.tag || 'claude-bridge';
+  const tag = data.tag || 'claude-wormhole';
 
   event.waitUntil(
     // Check if a notification with this tag already exists

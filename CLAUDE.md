@@ -1,4 +1,4 @@
-# claude-bridge
+# claude-wormhole
 
 A bridge between you and your Claude Code sessions, from any device over a private Tailscale network.
 
@@ -11,7 +11,7 @@ Web-based terminal UI + CLI tooling to manage tmux sessions (especially Claude C
 ## Components
 
 ```
-claude-bridge/
+claude-wormhole/
 ├── web/                      # Next.js app + WebSocket server (port 3100)
 │   ├── server.ts             # Custom server with node-pty + ws
 │   ├── src/app/              # Next.js pages (session list, terminal)

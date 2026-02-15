@@ -1,6 +1,6 @@
 # Setup Guide
 
-Complete guide to run Claude Code sessions from your phone using claude-bridge.
+Complete guide to run Claude Code sessions from your phone using claude-wormhole.
 
 **How it works:** Your Mac runs tmux sessions with Claude Code. A Next.js web app exposes those sessions over WebSocket. Tailscale creates a private network so you can access it from your phone without exposing anything to the public internet.
 
@@ -84,7 +84,7 @@ Add an alias to your shell config (`~/.zshrc` or `~/.bashrc`):
 
 ```sh
 # Add this line to ~/.zshrc
-alias cld="/path/to/claude-bridge/scripts/cld.sh"
+alias cld="/path/to/claude-wormhole/scripts/cld.sh"
 ```
 
 Then reload:
@@ -190,8 +190,8 @@ This builds if needed, enables tailscale serve, and starts the server.
 ### Logs
 
 Logs are written to:
-- **stdout**: `/tmp/claude-bridge.log`
-- **stderr**: `/tmp/claude-bridge.err`
+- **stdout**: `/tmp/claude-wormhole.log`
+- **stderr**: `/tmp/claude-wormhole.err`
 
 ## 6. Push Notifications (Optional)
 
@@ -233,7 +233,7 @@ Notifications are triggered by Claude Code's hook system. Add these hooks to `~/
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/claude-bridge/scripts/notify-bridge.sh",
+            "command": "/path/to/claude-wormhole/scripts/notify.sh",
             "timeout": 10
           }
         ]
@@ -244,7 +244,7 @@ Notifications are triggered by Claude Code's hook system. Add these hooks to `~/
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/claude-bridge/scripts/notify-bridge.sh",
+            "command": "/path/to/claude-wormhole/scripts/notify.sh",
             "timeout": 10
           }
         ]
@@ -258,7 +258,7 @@ This sends push notifications when:
 - **`Notification`** — Claude needs permission or is waiting for input
 - **`Stop`** — Claude finishes a task
 
-The hook script defaults to `http://localhost:3100`. Set `CLAUDE_BRIDGE_URL` in your shell profile to override.
+The hook script defaults to `http://localhost:3100`. Set `CLAUDE_WORMHOLE_URL` in your shell profile to override.
 
 ### Test
 
@@ -335,7 +335,7 @@ The PWA runs in standalone mode (no Safari chrome) with a dark theme optimized f
 
 **`cld` command not found**
 - Ensure the alias is in your `~/.zshrc` and you've run `source ~/.zshrc`
-- Check the script is executable: `chmod +x /path/to/claude-bridge/scripts/cld.sh`
+- Check the script is executable: `chmod +x /path/to/claude-wormhole/scripts/cld.sh`
 
 **tmux plugins not loading**
 - Run `prefix + I` inside tmux to install plugins via TPM

@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.claude-bridge.web</string>
+    <string>com.claude-wormhole.web</string>
 
     <!-- Update these paths to match your setup -->
     <key>WorkingDirectory</key>
-    <string>/Users/YOU/www/claude-bridge/web</string>
+    <string>/Users/YOU/www/claude-wormhole/web</string>
 
     <key>ProgramArguments</key>
     <array>
@@ -32,9 +32,9 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/tmp/claude-bridge.log</string>
+    <string>/tmp/claude-wormhole.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/tmp/claude-bridge.err</string>
+    <string>/tmp/claude-wormhole.err</string>
 </dict>
 </plist>

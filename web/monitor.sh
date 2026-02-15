@@ -1,5 +1,5 @@
 #!/bin/bash
-# Watchdog for claude-bridge web server
+# Watchdog for claude-wormhole web server
 # Checks health every 60s, restarts after 3 consecutive failures
 #
 # Usage:
@@ -8,7 +8,7 @@
 #   tmux new -d -s monitor './monitor.sh'  # run in tmux (recommended)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-LOG="/tmp/claude-bridge-monitor.log"
+LOG="/tmp/claude-wormhole-monitor.log"
 HEALTH_URL="http://localhost:3100/api/sessions"
 CHECK_INTERVAL=60
 FAIL_THRESHOLD=3

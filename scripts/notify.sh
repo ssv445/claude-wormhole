@@ -1,5 +1,5 @@
 #!/bin/bash
-# Claude Code hook script — sends notifications to claude-bridge server.
+# Claude Code hook script — sends notifications to claude-wormhole server.
 # Reads hook event JSON from stdin, POSTs to /api/notify.
 # Used by Notification + Stop hooks in ~/.claude/settings.json.
 
@@ -19,10 +19,10 @@ case "$NOTIFICATION_TYPE" in
   *)                 TYPE="$NOTIFICATION_TYPE" ;;
 esac
 
-# CLAUDE_BRIDGE_URL can be set in your shell profile; defaults to localhost:3100
-BRIDGE_URL="${CLAUDE_BRIDGE_URL:-http://localhost:3100}"
+# CLAUDE_WORMHOLE_URL can be set in your shell profile; defaults to localhost:3100
+WORMHOLE_URL="${CLAUDE_WORMHOLE_URL:-http://localhost:3100}"
 
-curl -s -X POST "$BRIDGE_URL/api/notify" \
+curl -s -X POST "$WORMHOLE_URL/api/notify" \
   -H "Content-Type: application/json" \
   -d "{\"type\": \"$TYPE\", \"message\": \"$MESSAGE\", \"session\": \"$TMUX_SESSION\"}" \
   > /dev/null 2>&1

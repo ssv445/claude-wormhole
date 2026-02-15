@@ -98,7 +98,7 @@ run_ansi_test() {
 
 FULL_JSON='{
   "model": {"id": "claude-opus-4-6", "display_name": "Opus"},
-  "workspace": {"current_dir": "/Users/shyam/www/claude-bridge", "project_dir": "/Users/shyam/www/claude-bridge"},
+  "workspace": {"current_dir": "/Users/shyam/www/claude-wormhole", "project_dir": "/Users/shyam/www/claude-wormhole"},
   "cost": {"total_cost_usd": 1.23, "total_duration_ms": 492000, "total_api_duration_ms": 12000, "total_lines_added": 156, "total_lines_removed": 23},
   "context_window": {"total_input_tokens": 84000, "total_output_tokens": 4521, "context_window_size": 200000, "used_percentage": 42, "remaining_percentage": 58},
   "session_id": "abc123", "version": "1.0.80"
@@ -106,7 +106,7 @@ FULL_JSON='{
 
 EARLY_SESSION='{
   "model": {"id": "claude-sonnet-4-5-20250929", "display_name": "Sonnet"},
-  "workspace": {"current_dir": "/Users/shyam/www/claude-bridge", "project_dir": "/Users/shyam/www/claude-bridge"},
+  "workspace": {"current_dir": "/Users/shyam/www/claude-wormhole", "project_dir": "/Users/shyam/www/claude-wormhole"},
   "cost": {"total_cost_usd": null, "total_duration_ms": null, "total_lines_added": null, "total_lines_removed": null},
   "context_window": {"used_percentage": null, "remaining_percentage": null, "current_usage": null},
   "session_id": "def456", "version": "1.0.80"
@@ -122,7 +122,7 @@ HIGH_CONTEXT='{
 
 CRITICAL_CONTEXT='{
   "model": {"id": "claude-opus-4-6", "display_name": "Opus"},
-  "workspace": {"current_dir": "/Users/shyam/www/claude-bridge", "project_dir": "/Users/shyam/www/claude-bridge"},
+  "workspace": {"current_dir": "/Users/shyam/www/claude-wormhole", "project_dir": "/Users/shyam/www/claude-wormhole"},
   "cost": {"total_cost_usd": 12.34, "total_duration_ms": 3600000, "total_lines_added": 500, "total_lines_removed": 200},
   "context_window": {"used_percentage": 95, "remaining_percentage": 5},
   "session_id": "jkl012", "version": "1.0.80"
@@ -130,7 +130,7 @@ CRITICAL_CONTEXT='{
 
 ZERO_CONTEXT='{
   "model": {"id": "claude-opus-4-6", "display_name": "Opus"},
-  "workspace": {"current_dir": "/Users/shyam/www/claude-bridge", "project_dir": "/Users/shyam/www/claude-bridge"},
+  "workspace": {"current_dir": "/Users/shyam/www/claude-wormhole", "project_dir": "/Users/shyam/www/claude-wormhole"},
   "cost": {"total_cost_usd": 0, "total_duration_ms": 0, "total_lines_added": 0, "total_lines_removed": 0},
   "context_window": {"used_percentage": 0, "remaining_percentage": 100},
   "session_id": "mno345", "version": "1.0.80"
@@ -138,7 +138,7 @@ ZERO_CONTEXT='{
 
 FULL_CONTEXT='{
   "model": {"id": "claude-opus-4-6", "display_name": "Opus"},
-  "workspace": {"current_dir": "/Users/shyam/www/claude-bridge", "project_dir": "/Users/shyam/www/claude-bridge"},
+  "workspace": {"current_dir": "/Users/shyam/www/claude-wormhole", "project_dir": "/Users/shyam/www/claude-wormhole"},
   "cost": {"total_cost_usd": 25.00, "total_duration_ms": 7200000, "total_lines_added": 1000, "total_lines_removed": 500},
   "context_window": {"used_percentage": 100, "remaining_percentage": 0},
   "session_id": "pqr678", "version": "1.0.80"
@@ -146,7 +146,7 @@ FULL_CONTEXT='{
 
 DECIMAL_PCT='{
   "model": {"id": "claude-opus-4-6", "display_name": "Opus"},
-  "workspace": {"current_dir": "/Users/shyam/www/claude-bridge", "project_dir": "/Users/shyam/www/claude-bridge"},
+  "workspace": {"current_dir": "/Users/shyam/www/claude-wormhole", "project_dir": "/Users/shyam/www/claude-wormhole"},
   "cost": {"total_cost_usd": 0.50, "total_duration_ms": 120000, "total_lines_added": 10, "total_lines_removed": 3},
   "context_window": {"used_percentage": 42.7, "remaining_percentage": 57.3},
   "session_id": "stu901", "version": "1.0.80"
@@ -167,7 +167,7 @@ SONNET_MODEL='{
 
 HIGH_COST='{
   "model": {"id": "claude-opus-4-6", "display_name": "Opus"},
-  "workspace": {"current_dir": "/Users/shyam/www/claude-bridge", "project_dir": "/Users/shyam/www/claude-bridge"},
+  "workspace": {"current_dir": "/Users/shyam/www/claude-wormhole", "project_dir": "/Users/shyam/www/claude-wormhole"},
   "cost": {"total_cost_usd": 123.45, "total_duration_ms": 18000000, "total_lines_added": 2000, "total_lines_removed": 800},
   "context_window": {"used_percentage": 65, "remaining_percentage": 35},
   "session_id": "yza567", "version": "1.0.80"
@@ -181,7 +181,7 @@ echo ""
 
 echo "--- T1: Field Extraction ---"
 run_test "Normal session shows model" "$FULL_JSON" "\\[Opus\\]"
-run_test "Normal session shows project dir" "$FULL_JSON" "claude-bridge"
+run_test "Normal session shows project dir" "$FULL_JSON" "claude-wormhole"
 run_test "Normal session shows cost" "$FULL_JSON" '[$]1\.23'
 run_test "Normal session shows percentage" "$FULL_JSON" "42%"
 run_test "Normal session shows duration" "$FULL_JSON" "8m 12s"

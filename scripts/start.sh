@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Standalone startup script for claude-bridge web server.
+# Standalone startup script for claude-wormhole web server.
 # Builds if needed, ensures tailscale serve is active, then starts the server.
 
 set -euo pipefail

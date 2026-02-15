@@ -1,5 +1,5 @@
 #!/bin/bash
-# Rebuild and restart claude-bridge web server
+# Rebuild and restart claude-wormhole web server
 # Usage: ./restart.sh
 
 set -e
@@ -36,7 +36,7 @@ rm -rf .next
 npm run build
 
 echo "==> Starting server..."
-NODE_ENV=production nohup node dist/server.cjs > /tmp/claude-bridge.log 2>&1 &
+NODE_ENV=production nohup node dist/server.cjs > /tmp/claude-wormhole.log 2>&1 &
 SERVER_PID=$!
 
 # Verify server is actually healthy (HTTP 200 from sessions API)
@@ -45,12 +45,12 @@ for i in 1 2 3 4 5; do
   HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3100/api/sessions 2>/dev/null || echo "000")
   if [ "$HTTP_CODE" = "200" ]; then
     echo "==> Server running (PID $SERVER_PID)"
-    echo "    Logs: /tmp/claude-bridge.log"
+    echo "    Logs: /tmp/claude-wormhole.log"
     exit 0
   fi
   echo "    Waiting for server... (attempt $i, got HTTP $HTTP_CODE)"
 done
 
-echo "ERROR: Server failed to start. Check /tmp/claude-bridge.log"
-tail -20 /tmp/claude-bridge.log
+echo "ERROR: Server failed to start. Check /tmp/claude-wormhole.log"
+tail -20 /tmp/claude-wormhole.log
 exit 1

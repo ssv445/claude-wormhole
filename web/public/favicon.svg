@@ -1,18 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <!-- Favicon: same bridge, slightly thicker strokes for small-size clarity -->
-  <!-- Tower left -->
-  <line x1="148" y1="130" x2="148" y2="370" stroke="#da7756" stroke-width="42" stroke-linecap="round"/>
-  <!-- Tower right -->
-  <line x1="364" y1="130" x2="364" y2="370" stroke="#da7756" stroke-width="42" stroke-linecap="round"/>
-  <!-- Main catenary cable -->
-  <path d="M148,152 Q256,290 364,152" stroke="#c4644a" stroke-width="28" stroke-linecap="round" fill="none"/>
-  <!-- Suspension cables (fewer, thicker for small sizes) -->
-  <line x1="204" y1="206" x2="204" y2="310" stroke="#c4644a" stroke-width="14" stroke-linecap="round"/>
-  <line x1="256" y1="240" x2="256" y2="310" stroke="#c4644a" stroke-width="14" stroke-linecap="round"/>
-  <line x1="308" y1="206" x2="308" y2="310" stroke="#c4644a" stroke-width="14" stroke-linecap="round"/>
-  <!-- Road deck -->
-  <line x1="70" y1="310" x2="442" y2="310" stroke="#da7756" stroke-width="36" stroke-linecap="round"/>
-  <!-- Tower caps -->
-  <line x1="122" y1="130" x2="174" y2="130" stroke="#e8956d" stroke-width="22" stroke-linecap="round"/>
-  <line x1="338" y1="130" x2="390" y2="130" stroke="#e8956d" stroke-width="22" stroke-linecap="round"/>
+  <!-- Favicon wormhole: thicker strokes for small-size clarity -->
+  <!-- Outer ring -->
+  <circle cx="256" cy="256" r="200" stroke="#da7756" stroke-width="36" fill="none" opacity="0.35"/>
+  <!-- Mid ring -->
+  <circle cx="256" cy="256" r="140" stroke="#da7756" stroke-width="32" fill="none" opacity="0.55"/>
+  <!-- Inner ring -->
+  <circle cx="256" cy="256" r="85" stroke="#da7756" stroke-width="28" fill="none" opacity="0.75"/>
+  <!-- Core -->
+  <circle cx="256" cy="256" r="38" fill="#e8956d"/>
+  <!-- Spiral arms — thicker for favicon -->
+  <path d="M256,56 Q390,150 390,256 Q390,380 256,410 Q120,380 120,256 Q120,170 200,130" stroke="#c4644a" stroke-width="20" stroke-linecap="round" fill="none" opacity="0.5"/>
+  <path d="M256,456 Q122,362 122,256 Q122,132 256,102 Q390,132 390,256 Q390,340 312,380" stroke="#c4644a" stroke-width="20" stroke-linecap="round" fill="none" opacity="0.5"/>
 </svg>

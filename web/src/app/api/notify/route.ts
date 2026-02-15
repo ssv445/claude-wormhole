@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
           ? 'Claude waiting'
           : type === 'stop'
             ? 'Task complete'
-            : 'Claude Bridge';
+            : 'Claude Wormhole';
 
     const title = session ? `${session} — ${label}` : label;
 

@@ -1,4 +1,4 @@
-# claude-bridge
+# claude-wormhole
 
 Never leave Claude Code waiting. Access your sessions from terminal, VS Code, browser, or phone - same session, any device, zero interruption.
 
@@ -10,7 +10,7 @@ The underlying issue: Claude Code sessions are tied to whichever terminal spawne
 
 ## The Solution
 
-claude-bridge decouples sessions from any single interface. A Claude Code session runs inside tmux on your Mac. You connect to it from whatever is in front of you right now.
+claude-wormhole decouples sessions from any single interface. A Claude Code session runs inside tmux on your Mac. You connect to it from whatever is in front of you right now.
 
 ```
 Desktop terminal  ──┐
@@ -45,7 +45,7 @@ The session is the same across all channels. Start something on your desktop, ap
 
 ```sh
 # 1. Set up the cld alias
-echo 'alias cld="/path/to/claude-bridge/scripts/cld.sh"' >> ~/.zshrc
+echo 'alias cld="/path/to/claude-wormhole/scripts/cld.sh"' >> ~/.zshrc
 source ~/.zshrc
 
 # 2. Start a Claude session

@@ -1,20 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <!-- Suspension bridge: two towers, catenary cable, road deck -->
-  <!-- Tower left -->
-  <line x1="148" y1="140" x2="148" y2="360" stroke="#da7756" stroke-width="34" stroke-linecap="round"/>
-  <!-- Tower right -->
-  <line x1="364" y1="140" x2="364" y2="360" stroke="#da7756" stroke-width="34" stroke-linecap="round"/>
-  <!-- Main catenary cable between tower tops -->
-  <path d="M148,158 Q256,280 364,158" stroke="#c4644a" stroke-width="22" stroke-linecap="round" fill="none"/>
-  <!-- Suspension cables from catenary to deck -->
-  <line x1="190" y1="195" x2="190" y2="310" stroke="#c4644a" stroke-width="10" stroke-linecap="round"/>
-  <line x1="232" y1="224" x2="232" y2="310" stroke="#c4644a" stroke-width="10" stroke-linecap="round"/>
-  <line x1="256" y1="236" x2="256" y2="310" stroke="#c4644a" stroke-width="10" stroke-linecap="round"/>
-  <line x1="280" y1="224" x2="280" y2="310" stroke="#c4644a" stroke-width="10" stroke-linecap="round"/>
-  <line x1="322" y1="195" x2="322" y2="310" stroke="#c4644a" stroke-width="10" stroke-linecap="round"/>
-  <!-- Road deck -->
-  <line x1="80" y1="310" x2="432" y2="310" stroke="#da7756" stroke-width="28" stroke-linecap="round"/>
-  <!-- Tower caps (lighter highlight) -->
-  <line x1="128" y1="140" x2="168" y2="140" stroke="#e8956d" stroke-width="18" stroke-linecap="round"/>
-  <line x1="344" y1="140" x2="384" y2="140" stroke="#e8956d" stroke-width="18" stroke-linecap="round"/>
+  <!-- Wormhole: spiral vortex in Claude orange -->
+  <!-- Outer ring -->
+  <circle cx="256" cy="256" r="200" stroke="#da7756" stroke-width="28" fill="none" opacity="0.3"/>
+  <!-- Mid ring -->
+  <circle cx="256" cy="256" r="145" stroke="#da7756" stroke-width="24" fill="none" opacity="0.5"/>
+  <!-- Inner ring -->
+  <circle cx="256" cy="256" r="95" stroke="#da7756" stroke-width="20" fill="none" opacity="0.7"/>
+  <!-- Core ring -->
+  <circle cx="256" cy="256" r="50" stroke="#da7756" stroke-width="18" fill="none" opacity="0.9"/>
+  <!-- Center glow -->
+  <circle cx="256" cy="256" r="18" fill="#e8956d"/>
+  <!-- Spiral arms — creates the vortex illusion -->
+  <path d="M256,56 Q380,140 380,256 Q380,370 256,400 Q130,370 130,256 Q130,180 200,140" stroke="#c4644a" stroke-width="14" stroke-linecap="round" fill="none" opacity="0.6"/>
+  <path d="M256,456 Q132,372 132,256 Q132,142 256,112 Q382,142 382,256 Q382,332 312,372" stroke="#c4644a" stroke-width="14" stroke-linecap="round" fill="none" opacity="0.6"/>
 </svg>
