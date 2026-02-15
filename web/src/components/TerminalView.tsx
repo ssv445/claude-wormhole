@@ -677,11 +677,11 @@ export function TerminalView({
         >
           <span className="text-xs font-mono font-bold">Esc</span>
         </button>
-        {/* Paste — uses onClick (not onPointerDown) so iOS recognizes the user gesture for clipboard */}
+        {/* Paste — sends Ctrl+V to trigger Claude Code's native paste (including images from host clipboard) */}
         <button
-          onClick={handlePaste}
+          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); sendKey('\x16'); }}
           className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
-          title="Paste"
+          title="Paste (Ctrl+V)"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
             <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
