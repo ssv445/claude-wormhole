@@ -19,9 +19,6 @@ claude-wormhole/
 ├── scripts/
 │   ├── cld.sh                # CLI: launch Claude Code in tmux sessions
 │   └── tmux.conf             # tmux config with resurrect + continuum
-├── vscode/
-│   ├── extension/            # VS Code sidebar for session management
-│   └── profiles/             # Touch-optimized VS Code profile
 ├── SETUP.md                  # Full setup guide
 └── CLAUDE.md
 ```
@@ -31,7 +28,6 @@ claude-wormhole/
 - **Web**: Next.js, xterm.js, node-pty, WebSocket (ws)
 - **CLI**: Bash, tmux, sesh
 - **Networking**: Tailscale serve (HTTPS)
-- **VS Code**: TypeScript extension, .code-profile
 
 ## Key Architecture
 
