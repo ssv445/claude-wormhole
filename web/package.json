@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper 2>/dev/null || true",
-    "dev": "tsx server.ts",
+    "dev": "PORT=3101 tsx server.ts",
     "build:server": "esbuild server.ts --bundle --platform=node --format=cjs --outfile=dist/server.cjs --packages=external --sourcemap",
     "build": "next build && npm run build:server",
     "prestart": "test -f dist/server.cjs || (echo 'Run npm run build first' && exit 1)",

@@ -7,11 +7,11 @@
 #
 # Environment:
 #   CLD_ARGS  Default flags passed to claude.
-#             Default: "--dangerously-skip-permissions --chrome"
+#             Default: "--dangerously-skip-permissions"
 
 set -e
 
-DEFAULT_ARGS="${CLD_ARGS:---dangerously-skip-permissions --chrome}"
+DEFAULT_ARGS="${CLD_ARGS:---dangerously-skip-permissions}"
 
 # Already inside tmux? Just run claude.
 if [ -n "${TMUX:-}" ]; then

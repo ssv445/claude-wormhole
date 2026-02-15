@@ -30,7 +30,7 @@ case "${1:-}" in
 
     # Ensure tailscale serve is active
     if command -v tailscale &>/dev/null; then
-      tailscale serve --bg 3100 2>/dev/null || echo "Warning: tailscale serve failed"
+      tailscale serve --bg --https 3100 3100 2>/dev/null || echo "Warning: tailscale serve failed"
     fi
 
     echo "Loading agent..."

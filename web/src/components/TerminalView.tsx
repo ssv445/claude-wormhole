@@ -130,6 +130,12 @@ export function TerminalView({
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [termReady, setTermReady] = useState(false);
 
+  // Selection mode state (mobile long-press to select text)
+  const [selectionMode, setSelectionMode] = useState(false);
+  const savedMouseModeRef = useRef<string>('none');
+  const selectionModeRef = useRef(false);
+  const enterSelectionRef = useRef<(() => void) | null>(null);
+
   const sendKey = useCallback((key: string) => {
     wsRef.current?.send(key);
   }, []);
@@ -144,6 +150,48 @@ export function TerminalView({
       // clipboard access denied or empty
     }
   }, []);
+
+  // Keep refs in sync for closure access in touch handlers
+  useEffect(() => { selectionModeRef.current = selectionMode; }, [selectionMode]);
+
+  const enterSelectionMode = useCallback(() => {
+    const term = xtermRef.current;
+    if (!term) return;
+    // Save current mouse tracking mode so we can restore it
+    savedMouseModeRef.current = term.modes.mouseTrackingMode;
+    if (savedMouseModeRef.current === 'none') return; // nothing to disable
+    // Disable mouse reporting locally in xterm.js (not sent to tmux).
+    // This re-enables xterm.js's built-in SelectionService.
+    term.write('\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l');
+    setSelectionMode(true);
+    selectionModeRef.current = true;
+    if (navigator.vibrate) navigator.vibrate(50);
+  }, []);
+
+  const exitSelectionMode = useCallback((copyFirst = false) => {
+    const term = xtermRef.current;
+    if (!term) return;
+    if (copyFirst) {
+      const sel = term.getSelection();
+      if (sel) navigator.clipboard.writeText(sel).catch(() => {});
+    }
+    term.clearSelection();
+    // Re-enable mouse reporting with the saved mode
+    const modeMap: Record<string, string> = {
+      x10: '\x1b[?9h',
+      vt200: '\x1b[?1000h',
+      drag: '\x1b[?1002h',
+      any: '\x1b[?1003h',
+    };
+    const decset = modeMap[savedMouseModeRef.current];
+    if (decset) {
+      term.write(decset + '\x1b[?1006h'); // also re-enable SGR encoding
+    }
+    setSelectionMode(false);
+    selectionModeRef.current = false;
+  }, []);
+
+  useEffect(() => { enterSelectionRef.current = enterSelectionMode; }, [enterSelectionMode]);
 
   // Blur terminal when virtual keyboard is shown to prevent mobile keyboard
   // and refit terminal when keyboard visibility changes
@@ -319,29 +367,63 @@ export function TerminalView({
         return true;
       });
 
-      // Touch-to-scroll: send mouse wheel escape sequences to tmux.
-      // With `mouse on`, tmux enters copy mode on scroll up automatically.
-      // SGR mouse encoding (mode 1006): \x1b[<64;col;rowM = wheel up,
-      // \x1b[<65;col;rowM = wheel down. tmux handles the rest.
+      // Touch handling: scroll (swipe) + long-press to enter selection mode.
+      // With tmux `mouse on`, scroll sends SGR mouse wheel escape sequences.
+      // Long-press (500ms hold) temporarily disables mouse reporting in xterm.js
+      // so the user can select text, then re-enables on exit.
       let touchStartY = 0;
+      let touchStartX = 0;
       let touchScrolling = false;
       let touchAccumulator = 0;
       const scrollSensitivity = 20; // px per scroll event
+      let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+      const LONG_PRESS_MS = 500;
+      const MOVE_THRESHOLD = 10; // px — cancel long press if finger moves
+
+      function cancelLongPress() {
+        if (longPressTimer) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+      }
 
       function onTouchStart(e: TouchEvent) {
         if (e.touches.length !== 1) return;
+        // In selection mode, let xterm.js handle touches for drag-to-select
+        if (selectionModeRef.current) return;
+
         touchStartY = e.touches[0].clientY;
+        touchStartX = e.touches[0].clientX;
         touchScrolling = false;
         touchAccumulator = 0;
+
+        // Start long-press timer
+        cancelLongPress();
+        longPressTimer = setTimeout(() => {
+          longPressTimer = null;
+          enterSelectionRef.current?.();
+        }, LONG_PRESS_MS);
       }
 
       function onTouchMove(e: TouchEvent) {
-        if (e.touches.length !== 1 || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+        if (e.touches.length !== 1) return;
+        // In selection mode, let xterm.js handle touches for drag-to-select
+        if (selectionModeRef.current) return;
+        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
 
         const deltaY = touchStartY - e.touches[0].clientY;
+        const deltaX = e.touches[0].clientX - touchStartX;
+
+        // Cancel long-press if finger moved beyond threshold
+        if (longPressTimer && (Math.abs(deltaX) > MOVE_THRESHOLD || Math.abs(deltaY) > MOVE_THRESHOLD)) {
+          cancelLongPress();
+        }
 
         // Threshold to distinguish swipes from taps
         if (!touchScrolling && Math.abs(deltaY) < 15) return;
+
+        // Once scrolling starts, cancel long-press
+        cancelLongPress();
 
         if (!touchScrolling) {
           term.blur(); // dismiss iOS input accessories
@@ -366,6 +448,7 @@ export function TerminalView({
       }
 
       function onTouchEnd() {
+        cancelLongPress();
         touchScrolling = false;
         touchAccumulator = 0;
       }
@@ -492,6 +575,27 @@ export function TerminalView({
             </svg>
           </button>
         </div>
+
+        {/* Selection mode bar — shown when long-press activates selection */}
+        {selectionMode && (
+          <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-3 py-2 bg-blue-600/90 backdrop-blur-sm md:hidden">
+            <span className="text-white text-xs font-mono">Selection mode</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => exitSelectionMode(true)}
+                className="px-3 py-1 bg-white/20 rounded text-white text-xs font-mono active:bg-white/40"
+              >
+                Copy
+              </button>
+              <button
+                onClick={() => exitSelectionMode(false)}
+                className="px-3 py-1 bg-white/10 rounded text-white/70 text-xs font-mono active:bg-white/30"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Reconnection overlay */}
         {(connectionState === 'reconnecting' || connectionState === 'failed') && (

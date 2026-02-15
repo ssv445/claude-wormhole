@@ -17,7 +17,7 @@ fi
 
 # Ensure tailscale serve is active (idempotent, safe to re-run)
 if command -v tailscale &>/dev/null; then
-  tailscale serve --bg 3100 2>/dev/null || echo "Warning: tailscale serve failed (is Tailscale running?)"
+  tailscale serve --bg --https 3100 3100 2>/dev/null || echo "Warning: tailscale serve failed (is Tailscale running?)"
 fi
 
 # Start the production server
