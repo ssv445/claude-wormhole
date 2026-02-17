@@ -43,20 +43,28 @@ else
         echo "  [$i] $session  ${DIR:+($DIR)}"
         ((i++))
     done <<< "$SESSIONS"
-    echo "  [n] New session"
+    echo "  [n] New session (or type a name)"
     echo ""
 
     read -rp "Choice: " choice
 
-    if [[ "$choice" == "n" || "$choice" == "N" ]]; then
-        COUNT=$(echo "$SESSIONS" | wc -l | tr -d ' ')
-        SESSION_NAME="${PROJECT_NAME}-$((COUNT + 1))"
-    else
+    if [[ "$choice" =~ ^[0-9]+$ ]]; then
+        # Number: select existing session by index
         SESSION_NAME=$(echo "$SESSIONS" | sed -n "${choice}p")
         if [ -z "$SESSION_NAME" ]; then
             echo "Invalid choice"
             exit 1
         fi
+    elif [[ "$choice" == "n" || "$choice" == "N" ]]; then
+        # n/N: auto-generate a new session name
+        COUNT=$(echo "$SESSIONS" | wc -l | tr -d ' ')
+        SESSION_NAME="${PROJECT_NAME}-$((COUNT + 1))"
+    elif [ -n "$choice" ]; then
+        # Any other string: use as custom session name
+        SESSION_NAME="$choice"
+    else
+        echo "No choice made"
+        exit 1
     fi
 fi
 
