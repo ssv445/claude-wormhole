@@ -157,6 +157,7 @@ export function TerminalView({
   const [isListening, setIsListening] = useState(false);
   const [showCompose, setShowCompose] = useState(false);
   const [composeText, setComposeText] = useState('');
+  const composeTextRef = useRef('');
   const speechRef = useRef<SpeechRecognitionInstance | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -184,9 +185,29 @@ export function TerminalView({
     wsRef.current?.send('\x16');
   }, []);
 
-  const startListening = useCallback(() => {
+  const startListening = useCallback(async () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return;
+
+    // Check and request mic permission before starting recognition
+    try {
+      const result = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+      if (result.state === 'denied') {
+        alert('Microphone permission denied. Enable it in browser settings.');
+        return;
+      }
+    } catch {
+      // permissions.query not supported (e.g. Safari) — fall through to getUserMedia
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Permission granted — stop the stream, we only needed the prompt
+      stream.getTracks().forEach(t => t.stop());
+    } catch {
+      alert('Microphone access is required for voice input.');
+      return;
+    }
 
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
@@ -227,9 +248,12 @@ export function TerminalView({
       speechRef.current = null;
     };
 
-    recognition.onerror = () => {
+    recognition.onerror = (ev: Event & { error?: string }) => {
       setIsListening(false);
       speechRef.current = null;
+      if (ev.error === 'not-allowed') {
+        alert('Microphone permission denied. Enable it in browser settings.');
+      }
     };
 
     recognition.start();
@@ -251,14 +275,17 @@ export function TerminalView({
 
   const closeCompose = useCallback((send: boolean) => {
     if (isListening) stopListening();
-    if (send && composeText.trim() && wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(composeText);
+    // Read from ref to avoid stale closure — composeText state may lag behind
+    const text = composeTextRef.current;
+    if (send && text.trim() && wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(text + '\r');
     }
     setShowCompose(false);
     setComposeText('');
-  }, [isListening, stopListening, composeText]);
+  }, [isListening, stopListening]);
 
   // Keep refs in sync for closure access in touch handlers
+  useEffect(() => { composeTextRef.current = composeText; }, [composeText]);
   useEffect(() => { selectionModeRef.current = selectionMode; }, [selectionMode]);
 
   const enterSelectionMode = useCallback(() => {
