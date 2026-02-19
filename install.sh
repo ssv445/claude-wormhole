@@ -191,7 +191,7 @@ fi
 
 if command -v tailscale &>/dev/null; then
   log "Setting up Tailscale serve..."
-  tailscale serve --bg 3100 2>/dev/null \
+  tailscale serve --bg --https 3100 3100 2>/dev/null \
     && ok "Tailscale serving port 3100 over HTTPS" \
     || warn "Tailscale serve failed (is Tailscale running?)"
 fi

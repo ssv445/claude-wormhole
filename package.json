@@ -9,7 +9,7 @@
     "build": "next build && npm run build:server",
     "prestart": "test -f dist/server.cjs || (echo 'Run npm run build first' && exit 1)",
     "start": "NODE_ENV=production node dist/server.cjs",
-    "setup:push": "./scripts/setup-push.sh"
+    "setup:push": "./bin/wormhole setup push"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",

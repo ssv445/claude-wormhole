@@ -10,6 +10,8 @@ WORMHOLE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 [ -f "$WORMHOLE_ROOT/.env.local" ] && set -a && source "$WORMHOLE_ROOT/.env.local" && set +a
 
 # Services
+# CLAUDE_WORMHOLE_URL is the user-facing env var (set in shell profile / .env)
+# WORMHOLE_URL is the internal name used by all wormhole commands
 export WORMHOLE_URL="${CLAUDE_WORMHOLE_URL:-http://localhost:3100}"
 export WORMHOLE_PORT="${WORMHOLE_PORT:-3100}"
 

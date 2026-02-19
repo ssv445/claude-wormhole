@@ -10,6 +10,7 @@ source "$WORMHOLE_BIN/env.sh"
 
 # ── Server lifecycle ──
 
+# Foreground start — used by launchd (blocks, launchd manages lifecycle)
 cmd_start() {
   log "Starting wormhole server..."
   cd "$WORMHOLE_ROOT"
@@ -31,6 +32,7 @@ cmd_start() {
   exec npm start
 }
 
+# Background restart — for ad-hoc use (daemonizes, polls for health)
 cmd_restart() {
   log "Restarting wormhole server..."
   cd "$WORMHOLE_ROOT"
@@ -341,9 +343,13 @@ cmd_notify() {
     *)                 type="$notification_type" ;;
   esac
 
+  local payload
+  payload=$(jq -cn --arg t "$type" --arg m "$message" --arg s "$tmux_session" \
+    '{type: $t, message: $m, session: $s}')
+
   curl -s -X POST "$WORMHOLE_URL/api/notify" \
     -H "Content-Type: application/json" \
-    -d "{\"type\": \"$type\", \"message\": \"$message\", \"session\": \"$tmux_session\"}" \
+    -d "$payload" \
     > /dev/null 2>&1
 
   exit 0
@@ -656,10 +662,13 @@ cmd_release() {
     echo -e "# Changelog\n\n${entry}" > "$changelog"
   fi
 
+  local current_branch
+  current_branch=$(git rev-parse --abbrev-ref HEAD)
+
   git add package.json CHANGELOG.md
   git commit -m "chore(release): v${new_version}"
   git tag "v${new_version}"
-  git push origin main --tags
+  git push origin "$current_branch" --tags
 
   ok "Released v${new_version}"
 }
