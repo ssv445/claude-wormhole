@@ -16,13 +16,14 @@ export WORMHOLE_URL="${CLAUDE_WORMHOLE_URL:-http://localhost:3100}"
 export WORMHOLE_PORT="${WORMHOLE_PORT:-3100}"
 
 # PATH - ensure claude, node, brew etc. are available (launchd/cron has minimal PATH)
-# Include nvm default node if nvm is installed
+export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.bun/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
+
+# nvm node goes FIRST so it wins over /usr/local/bin system node
 NVM_DEFAULT="$HOME/.nvm/versions/node"
 if [ -d "$NVM_DEFAULT" ]; then
   NVM_NODE=$(ls -d "$NVM_DEFAULT"/*/bin 2>/dev/null | tail -1)
   [ -n "$NVM_NODE" ] && export PATH="$NVM_NODE:$PATH"
 fi
-export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.bun/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
 
 # Allow nested Claude Code sessions
 unset CLAUDECODE 2>/dev/null || true
