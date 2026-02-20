@@ -1,0 +1,20 @@
+[
+  {
+    "name": "claude-dev",
+    "windows": 1,
+    "attached": true,
+    "created": "2/20/2026, 10:00:00 AM",
+    "workingDir": "/home/user/projects/claude-wormhole",
+    "lastActivity": "just now",
+    "claudeHint": "idle"
+  },
+  {
+    "name": "notes",
+    "windows": 1,
+    "attached": false,
+    "created": "2/20/2026, 9:00:00 AM",
+    "workingDir": "/home/user/notes",
+    "lastActivity": "5m ago",
+    "claudeHint": null
+  }
+]

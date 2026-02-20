@@ -646,7 +646,7 @@ export function TerminalView({
         reconnectTimerRef.current = null;
       }
       wsRef.current?.close();
-      cleanup.then((fn) => fn?.());
+      cleanup.then((fn) => fn?.()).catch(() => {/* cleanup errors non-fatal on unmount */});
     };
     // theme intentionally excluded — handled by separate effect
     // eslint-disable-next-line react-hooks/exhaustive-deps

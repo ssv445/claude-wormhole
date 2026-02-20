@@ -9,7 +9,10 @@
     "build": "next build && npm run build:server",
     "prestart": "test -f dist/server.cjs || (echo 'Run npm run build first' && exit 1)",
     "start": "NODE_ENV=production node dist/server.cjs",
-    "setup:push": "./bin/wormhole setup push"
+    "setup:push": "./bin/wormhole setup push",
+    "test": "npx playwright test --config tests/playwright.config.ts",
+    "test:mobile": "npx playwright test --config tests/playwright.config.ts --project mobile-webkit",
+    "test:mobile:headed": "npx playwright test --config tests/playwright.config.ts --project mobile-webkit --headed"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
@@ -25,6 +28,7 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
