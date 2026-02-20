@@ -49,10 +49,11 @@ test.describe('Paste', () => {
     expect(sent).toContain('\x16');
   });
 
-  test('clipboard permission denied → sends Ctrl+V (\\x16)', async ({ page }, testInfo) => {
+  test('clipboard permission denied → does NOT send Ctrl+V', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile-webkit', 'Mobile only');
 
-    // Stub clipboard.readText to throw (simulating denied permission)
+    // Stub clipboard.readText to throw (simulating denied permission on mobile)
+    // Should not fall back to Ctrl+V — that triggers Claude Code's "no image" warning
     await page.addInitScript(() => {
       navigator.clipboard.readText = async () => {
         throw new DOMException('Clipboard access denied', 'NotAllowedError');
@@ -66,6 +67,6 @@ test.describe('Paste', () => {
     await pointerDown(page, 'button[title="Paste (Ctrl+V)"]');
     await waitForMessages(page, 500);
 
-    expect(sent).toContain('\x16');
+    expect(sent).not.toContain('\x16');
   });
 });
