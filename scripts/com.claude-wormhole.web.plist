@@ -5,24 +5,21 @@
     <key>Label</key>
     <string>com.claude-wormhole.web</string>
 
-    <!-- Update these paths to match your setup -->
     <key>WorkingDirectory</key>
-    <string>/Users/YOU/www/claude-wormhole</string>
+    <string>/Users/shyam/www/claude-wormhole</string>
 
     <key>ProgramArguments</key>
     <array>
-        <!-- Use: which node -->
-        <string>/Users/YOU/.nvm/versions/node/v24.13.0/bin/node</string>
-        <string>dist/server.cjs</string>
+        <string>/Users/shyam/www/claude-wormhole/bin/wormhole</string>
+        <string>start</string>
     </array>
 
     <key>EnvironmentVariables</key>
     <dict>
         <key>NODE_ENV</key>
         <string>production</string>
-        <!-- Use: echo $PATH (from a terminal with node available) -->
-        <key>PATH</key>
-        <string>/Users/YOU/.nvm/versions/node/v24.13.0/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>TZ</key>
+        <string>Asia/Calcutta</string>
     </dict>
 
     <key>RunAtLoad</key>

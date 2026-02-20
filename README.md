@@ -37,37 +37,30 @@ Start something on your desktop, approve a prompt from your phone, review the re
 ## Quick Start
 
 ```sh
-# 1. Set up the cld alias
-echo 'alias cld="/path/to/claude-wormhole/scripts/cld.sh"' >> ~/.zshrc
-source ~/.zshrc
+# Install everything (prerequisites, build, CLI, hooks)
+./install.sh
 
-# 2. Start a Claude session
-cd ~/projects/my-app && cld
-
-# 3. Start the web server
-npm install && npm run dev
-
-# 4. Expose over Tailscale
-tailscale serve --bg 3100
-
-# 5. Open on your phone
-# https://your-machine.tailnet.ts.net/
+# Or manually:
+wormhole start               # Start the web server
+wormhole cld                 # Launch Claude in tmux (alias: cld)
+wormhole status              # Check system health
 ```
 
 ## Project Structure
 
 | Path | What |
 |---|---|
+| `bin/wormhole` | CLI — single command for everything (start, restart, cld, notify, etc.) |
+| `bin/env.sh` | Shared environment for all scripts |
 | `server.ts` | Custom server — node-pty + WebSocket pipes tmux I/O to xterm.js |
 | `src/` | Next.js app (session list, terminal view) |
-| `public/` | PWA manifest + icons |
-| `scripts/cld.sh` | CLI to launch Claude Code in tmux sessions |
 | `scripts/tmux.conf` | tmux config with resurrect + continuum for persistence |
+| `install.sh` | One-shot setup (prereqs, build, symlink, hooks, tailscale) |
 
 ## Docs
 
-- **[SETUP.md](SETUP.md)** — Full walkthrough: Tailscale, tmux, push notifications, PWA install, launchd service
-- **[WHY.md](WHY.md)** — What failed first (VS Code tunnels, webmux) and why this approach won
+- **[Setup Guide](docs/setup.md)** — Full walkthrough: Tailscale, tmux, push notifications, PWA install, launchd service
+- **[Why This Approach](docs/why.md)** — What failed first (VS Code tunnels, webmux) and why this approach won
 
 ## License
 

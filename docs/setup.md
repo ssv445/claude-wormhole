@@ -10,7 +10,30 @@ Phone (Safari PWA / SSH)
 Mac (tmux + Claude Code + web server)
 ```
 
-## Prerequisites
+## Automated Install
+
+The fastest path — handles prerequisites check, build, CLI setup, and hooks:
+
+```sh
+./install.sh
+```
+
+This will:
+1. Check prerequisites (tmux, node, jq, claude)
+2. `npm install` + `npm run build`
+3. Symlink `wormhole` to `/usr/local/bin/wormhole`
+4. Set up tmux config
+5. Configure Claude Code notification hooks
+6. Enable Tailscale serve
+7. Add `cld` shell alias
+
+After install, verify with `wormhole status`.
+
+## Manual Setup
+
+If you prefer to set things up step by step:
+
+### Prerequisites
 
 ```sh
 brew install tmux                              # terminal multiplexer
@@ -22,22 +45,22 @@ npm install -g @anthropic-ai/claude-code       # Claude Code CLI
 git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
 ```
 
-## 1. Tailscale
+### 1. Tailscale
 
-### Mac
+#### Mac
 
 1. Install: `brew install --cask tailscale` (or Mac App Store)
 2. Open Tailscale and sign in
 3. **Enable incoming connections** — Tailscale menu bar > Settings > "Allow incoming connections" ON
    - Without this, your phone can't reach the Mac (see Troubleshooting)
 
-### iOS
+#### iOS
 
 1. Install [Tailscale](https://apps.apple.com/app/tailscale/id1470499037) and sign in with the **same account**
 2. Verify both devices appear in your Tailscale admin console
 3. Test connectivity: find your Mac's IP with `tailscale ip -4`
 
-## 2. tmux
+### 2. tmux
 
 Copy the included config or merge with your existing `~/.tmux.conf`:
 
@@ -48,34 +71,34 @@ tmux    # start tmux, then press prefix + I to install plugins
 
 Includes tmux-resurrect (save/restore sessions) and tmux-continuum (auto-save every 15 min).
 
-## 3. The `cld` Alias
+### 3. The `cld` Command
 
-```sh
-# Add to ~/.zshrc
-alias cld="/path/to/claude-wormhole/scripts/cld.sh"
-source ~/.zshrc
-```
-
-Usage:
+After running `install.sh`, `cld` is available as a shell alias for `wormhole cld`:
 
 ```sh
 cd ~/projects/my-app
 cld                          # auto-detects "my-app" as session name
-cld my-session               # custom session name
 cld -- --model opus          # pass extra args to claude
 ```
 
-## 4. Web Server
+Or set it up manually:
 
 ```sh
-npm install
-npm run dev          # development (port 3100)
-
-# or production:
-npm run build && npm start
+# Add to ~/.zshrc
+alias cld="wormhole cld"
+source ~/.zshrc
 ```
 
-### Expose via Tailscale
+### 4. Web Server
+
+```sh
+wormhole start               # build-if-needed + start server
+
+# or for development:
+npm run dev                  # port 3100
+```
+
+#### Expose via Tailscale
 
 ```sh
 tailscale serve --bg 3100                    # serve over HTTPS
@@ -83,39 +106,34 @@ tailscale serve --bg 3100                    # serve over HTTPS
 tailscale serve --bg off                     # stop serving
 ```
 
-## 5. Run as Service (Auto-start)
+### 5. Run as Service (Auto-start)
 
 Auto-start on login with crash recovery via macOS launchd:
 
 ```sh
-./scripts/service.sh install     # build + enable tailscale serve + load agent
-./scripts/service.sh status      # check if running
-./scripts/service.sh logs        # tail stdout + stderr
-./scripts/service.sh restart     # stop + start
-./scripts/service.sh uninstall   # remove agent
+wormhole service install     # build + enable tailscale serve + load agent
+wormhole service status      # check if running
+wormhole service logs        # tail stdout + stderr
+wormhole service restart     # stop + start
+wormhole service uninstall   # remove agent
 ```
-
-Or start manually: `./scripts/start.sh` (builds if needed, enables tailscale serve, starts server).
 
 Logs: `/tmp/claude-wormhole.log` and `/tmp/claude-wormhole.err`
 
-## 6. Push Notifications (Optional)
+### 6. Push Notifications (Optional)
 
 Get notified when Claude needs input or finishes a task — even when the PWA isn't open.
 
 ```sh
-# Generate VAPID keys
-npm run setup:push https://your-machine.tailnet.ts.net
-
-# Restart the server
-npm run dev    # or: npm start
+wormhole setup push https://your-machine.tailnet.ts.net
+wormhole restart
 ```
 
 Then open the PWA on your phone and tap **Enable** on the notification banner.
 
-### Claude Code hooks
+#### Claude Code hooks
 
-Add to `~/.claude/settings.json`:
+The `install.sh` script configures these automatically. For manual setup, add to `~/.claude/settings.json`:
 
 ```json
 {
@@ -126,7 +144,7 @@ Add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/claude-wormhole/scripts/notify.sh",
+            "command": "/path/to/claude-wormhole/bin/wormhole notify",
             "timeout": 10
           }
         ]
@@ -137,7 +155,7 @@ Add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/claude-wormhole/scripts/notify.sh",
+            "command": "/path/to/claude-wormhole/bin/wormhole notify",
             "timeout": 10
           }
         ]
@@ -147,7 +165,7 @@ Add to `~/.claude/settings.json`:
 }
 ```
 
-The hook script defaults to `http://localhost:3100`. Set `CLAUDE_WORMHOLE_URL` to override.
+The hook defaults to `http://localhost:3100`. Set `CLAUDE_WORMHOLE_URL` to override.
 
 Test:
 
@@ -157,7 +175,7 @@ curl -X POST http://localhost:3100/api/notify \
   -d '{"type": "idle", "message": "Test notification", "session": "my-session"}'
 ```
 
-## 7. Install the PWA on iOS
+### 7. Install the PWA on iOS
 
 1. Open Safari > your Tailscale serve URL
 2. Tap **Share** > **Add to Home Screen**
@@ -165,7 +183,7 @@ curl -X POST http://localhost:3100/api/notify \
 
 Runs in standalone mode with no browser chrome, dark theme optimized for terminal use.
 
-## 8. SSH Fallback
+### 8. SSH Fallback
 
 If the web UI is down, use SSH via Tailscale:
 
@@ -178,10 +196,12 @@ If the web UI is down, use SSH via Tailscale:
 | What | Command |
 |---|---|
 | Start Claude session | `cd ~/projects/my-app && cld` |
-| Start web server | `npm run dev` |
+| Start web server | `wormhole start` |
+| Restart server | `wormhole restart` |
+| Check health | `wormhole status` |
 | Tailscale serve | `tailscale serve --bg 3100` |
 | Stop Tailscale serve | `tailscale serve --bg off` |
-| Setup push notifications | `npm run setup:push <your-url>` |
+| Setup push notifications | `wormhole setup push <your-url>` |
 | List tmux sessions | `tmux ls` |
 | Mac Tailscale IP | `tailscale ip -4` |
 
@@ -196,9 +216,12 @@ If the web UI is down, use SSH via Tailscale:
 - A tmux session must exist first: `tmux ls`
 - The web app attaches to existing sessions, it doesn't create them
 
+**`wormhole` not found**
+- Run `install.sh` again, or manually: `sudo ln -sf /path/to/claude-wormhole/bin/wormhole /usr/local/bin/wormhole`
+
 **`cld` not found**
 - Ensure the alias is in `~/.zshrc` and you've run `source ~/.zshrc`
-- Check the script is executable: `chmod +x /path/to/claude-wormhole/scripts/cld.sh`
+- Or run directly: `wormhole cld`
 
 **tmux plugins not loading**
 - Run `prefix + I` inside tmux to install via TPM

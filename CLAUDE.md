@@ -12,26 +12,34 @@ Web-based terminal UI + CLI tooling to manage tmux sessions (especially Claude C
 
 ```
 claude-wormhole/
+├── bin/
+│   ├── wormhole              # CLI: single command for everything
+│   └── env.sh                # Shared environment for all scripts
 ├── server.ts                 # Custom server with node-pty + ws (port 3100)
 ├── src/app/                  # Next.js pages (session list, terminal)
 ├── public/                   # PWA manifest + icons
 ├── scripts/
-│   ├── cld.sh                # CLI: launch Claude Code in tmux sessions
-│   └── tmux.conf             # tmux config with resurrect + continuum
-├── SETUP.md                  # Full setup guide
+│   ├── tmux.conf             # tmux config with resurrect + continuum
+│   ├── com.claude-wormhole.web.plist  # launchd plist
+│   └── statusline-test.sh    # Test harness for statusline
+├── docs/
+│   ├── setup.md              # Full setup guide
+│   └── why.md                # Architecture decisions
+├── install.sh                # One-shot setup
 └── CLAUDE.md
 ```
 
 ## Tech Stack
 
 - **Web**: Next.js, xterm.js, node-pty, WebSocket (ws)
-- **CLI**: Bash, tmux, sesh
+- **CLI**: Bash (`bin/wormhole`), tmux, sesh
 - **Networking**: Tailscale serve (HTTPS)
 
 ## Key Architecture
 
 - `server.ts` - Custom HTTP server that upgrades WebSocket connections at `/api/terminal?session=<name>`, spawns node-pty processes that attach to tmux sessions
-- `scripts/cld.sh` - Always passes `--dangerously-skip-permissions --chrome` to Claude Code, uses sesh for session management
+- `bin/wormhole` - Single CLI dispatcher: cld, start, restart, stop, status, monitor, service, notify, statusline, setup, release
+- `bin/env.sh` - Shared environment sourced by wormhole: sets WORMHOLE_ROOT, WORMHOLE_URL, PATH, log helpers
 - `scripts/tmux.conf` - Includes tmux-resurrect and tmux-continuum for session persistence across reboots
 
 ## Dev Commands
@@ -40,16 +48,22 @@ claude-wormhole/
 # Web app
 npm run dev                    # Development (port 3100)
 npm run build                  # Production build
-npm start                      # Production server
-./restart.sh                   # Kill → clean build → start (recommended)
+wormhole start                 # Build-if-needed + start server
+wormhole restart               # Kill + clean build + start
+wormhole stop                  # Stop server
+wormhole status                # Check system health
 
 # Tailscale
 tailscale serve --bg 3100      # Expose over Tailscale HTTPS
 tailscale serve --bg off       # Stop serving
 
 # Claude sessions
-cld                            # Launch Claude in tmux (needs alias)
+cld                            # Launch Claude in tmux (alias for wormhole cld)
 tmux ls                        # List sessions
+
+# Service (launchd)
+wormhole service install       # Auto-start on login
+wormhole service logs          # Tail logs
 ```
 
 ## Mobile Terminal Scrolling — Critical Architecture Notes
@@ -81,6 +95,6 @@ tmux ls                        # List sessions
 - Call `fitAddon.fit()` after resize to refit terminal to the new available space.
 
 ### Server restart procedure
-- Use `./restart.sh` — it handles kill → wait for port → clean build → start with nohup.
+- Use `wormhole restart` — it handles kill + wait for port + clean build + start with nohup.
 - `npm run dev` and `npm start` both use port 3100. Dev server child processes can linger after kill.
 - Always verify port is free before starting: `lsof -ti:3100 || echo "free"`

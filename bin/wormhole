@@ -1,0 +1,733 @@
+#!/bin/bash
+# wormhole - CLI for claude-wormhole
+# Usage: wormhole <command> [args]
+
+set -euo pipefail
+
+# Resolve symlinks to find the real bin/ directory
+WORMHOLE_BIN="$(cd "$(dirname "$(readlink "$0" 2>/dev/null || echo "$0")")" && pwd)"
+source "$WORMHOLE_BIN/env.sh"
+
+# ── Server lifecycle ──
+
+# Foreground start — used by launchd (blocks, launchd manages lifecycle)
+cmd_start() {
+  log "Starting wormhole server..."
+  cd "$WORMHOLE_ROOT"
+
+  # Build if .next/ doesn't exist
+  if [ ! -d ".next" ]; then
+    log "No .next/ found - building..."
+    npm run build
+  fi
+
+  # Ensure tailscale serve is active (idempotent, safe to re-run)
+  if command -v tailscale &>/dev/null; then
+    tailscale serve --bg --https "$WORMHOLE_PORT" "$WORMHOLE_PORT" 2>/dev/null \
+      && ok "Tailscale serve active on :$WORMHOLE_PORT" \
+      || warn "Tailscale serve failed (is Tailscale running?)"
+  fi
+
+  # Start the production server
+  exec npm start
+}
+
+# Background restart — for ad-hoc use (daemonizes, polls for health)
+cmd_restart() {
+  log "Restarting wormhole server..."
+  cd "$WORMHOLE_ROOT"
+
+  # Only kill node processes LISTENING on our port
+  log "Stopping server on port $WORMHOLE_PORT..."
+  local pids
+  pids=$(lsof -iTCP:"$WORMHOLE_PORT" -sTCP:LISTEN -t 2>/dev/null || true)
+  if [ -n "$pids" ]; then
+    echo "$pids" | xargs kill 2>/dev/null || true
+    for i in 1 2 3 4 5; do
+      sleep 1
+      if ! lsof -iTCP:"$WORMHOLE_PORT" -sTCP:LISTEN -t >/dev/null 2>&1; then
+        ok "Port $WORMHOLE_PORT is free"
+        break
+      fi
+      warn "Still listening, sending KILL (attempt $i)..."
+      lsof -iTCP:"$WORMHOLE_PORT" -sTCP:LISTEN -t 2>/dev/null | xargs kill -9 2>/dev/null || true
+    done
+  else
+    ok "Port $WORMHOLE_PORT is free"
+  fi
+
+  # Final check
+  if lsof -iTCP:"$WORMHOLE_PORT" -sTCP:LISTEN -t >/dev/null 2>&1; then
+    err "Could not free port $WORMHOLE_PORT. PIDs still holding it:"
+    lsof -iTCP:"$WORMHOLE_PORT" -sTCP:LISTEN
+    exit 1
+  fi
+
+  log "Clean building..."
+  rm -rf .next
+  npm run build
+
+  log "Starting server..."
+  NODE_ENV=production nohup node dist/server.cjs > /tmp/claude-wormhole.log 2>&1 &
+  local server_pid=$!
+
+  # Verify server is healthy
+  for i in 1 2 3 4 5; do
+    sleep 2
+    local http_code
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" "$WORMHOLE_URL/api/sessions" 2>/dev/null) || http_code="000"
+    if [ "$http_code" = "200" ]; then
+      ok "Server running (PID $server_pid)"
+      log "Logs: /tmp/claude-wormhole.log"
+      return 0
+    fi
+    log "Waiting for server... (attempt $i, got HTTP $http_code)"
+  done
+
+  err "Server failed to start. Check /tmp/claude-wormhole.log"
+  tail -20 /tmp/claude-wormhole.log
+  exit 1
+}
+
+cmd_stop() {
+  log "Stopping wormhole server..."
+  local pids
+  pids=$(lsof -iTCP:"$WORMHOLE_PORT" -sTCP:LISTEN -t 2>/dev/null || true)
+  if [ -n "$pids" ]; then
+    echo "$pids" | xargs kill 2>/dev/null || true
+    sleep 1
+    # Force kill if still running
+    pids=$(lsof -iTCP:"$WORMHOLE_PORT" -sTCP:LISTEN -t 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+      echo "$pids" | xargs kill -9 2>/dev/null || true
+    fi
+    ok "Server stopped"
+  else
+    log "Server not running"
+  fi
+}
+
+cmd_status() {
+  echo ""
+  echo "  WORMHOLE STATUS"
+  echo "  ───────────────"
+  echo ""
+
+  # Web server
+  local http_code
+  http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "$WORMHOLE_URL/api/sessions" 2>/dev/null) || http_code="000"
+  if [ "$http_code" = "200" ]; then
+    echo -e "  Web server:   ${GREEN}healthy${NC} ($WORMHOLE_URL)"
+  else
+    echo -e "  Web server:   ${RED}down${NC} (HTTP $http_code)"
+  fi
+
+  # Tailscale
+  if command -v tailscale &>/dev/null; then
+    local ts_status
+    ts_status=$(tailscale status --json 2>/dev/null | jq -r '.Self.Online // false' 2>/dev/null || echo "false")
+    if [ "$ts_status" = "true" ]; then
+      echo -e "  Tailscale:    ${GREEN}connected${NC}"
+    else
+      echo -e "  Tailscale:    ${RED}disconnected${NC}"
+    fi
+  else
+    echo -e "  Tailscale:    ${YELLOW}not installed${NC}"
+  fi
+
+  # launchd service
+  if launchctl list "com.claude-wormhole.web" &>/dev/null; then
+    echo -e "  Service:      ${GREEN}loaded${NC}"
+  else
+    echo -e "  Service:      ${DIM}not loaded${NC}"
+  fi
+
+  # tmux sessions
+  local session_count
+  session_count=$(tmux list-sessions 2>/dev/null | wc -l | tr -d ' ')
+  echo -e "  tmux:         ${session_count} session(s)"
+
+  echo ""
+}
+
+cmd_monitor() {
+  local check_interval="${1:-60}"
+  local fail_threshold="${2:-3}"
+  local log_file="/tmp/claude-wormhole-monitor.log"
+  local fail_count=0
+
+  _monitor_log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') $1" | tee -a "$log_file"
+  }
+
+  _monitor_log "Monitor started (check every ${check_interval}s, restart after ${fail_threshold} failures)"
+
+  while true; do
+    local http_code
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$WORMHOLE_URL/api/sessions" 2>/dev/null) || http_code="000"
+
+    if [ "$http_code" = "200" ]; then
+      if [ "$fail_count" -gt 0 ]; then
+        _monitor_log "Recovered (was at $fail_count failures)"
+      fi
+      fail_count=0
+    else
+      fail_count=$((fail_count + 1))
+      _monitor_log "Health check failed ($fail_count/$fail_threshold) - HTTP $http_code"
+
+      if [ "$fail_count" -ge "$fail_threshold" ]; then
+        _monitor_log "Restarting server..."
+        cmd_restart >> "$log_file" 2>&1 && _monitor_log "Restart succeeded" || _monitor_log "Restart FAILED - will retry next cycle"
+        fail_count=0
+      fi
+    fi
+
+    sleep "$check_interval"
+  done
+}
+
+# ── launchd service management ──
+
+cmd_service() {
+  local label="com.claude-wormhole.web"
+  local plist_src="$WORMHOLE_ROOT/scripts/com.claude-wormhole.web.plist"
+  local plist_dst="$HOME/Library/LaunchAgents/$label.plist"
+  local log_file="/tmp/claude-wormhole.log"
+  local err_file="/tmp/claude-wormhole.err"
+
+  case "${1:-}" in
+    install)
+      log "Building web app..."
+      (cd "$WORMHOLE_ROOT" && npm run build)
+
+      log "Installing plist..."
+      cp "$plist_src" "$plist_dst"
+
+      if command -v tailscale &>/dev/null; then
+        tailscale serve --bg --https "$WORMHOLE_PORT" "$WORMHOLE_PORT" 2>/dev/null || warn "Tailscale serve failed"
+      fi
+
+      log "Loading agent..."
+      launchctl load "$plist_dst"
+      ok "Installed and started."
+      ;;
+    uninstall)
+      log "Unloading agent..."
+      launchctl unload "$plist_dst" 2>/dev/null || true
+      rm -f "$plist_dst"
+      ok "Uninstalled."
+      ;;
+    start)
+      launchctl start "$label"
+      ok "Started."
+      ;;
+    stop)
+      launchctl stop "$label"
+      ok "Stopped."
+      ;;
+    restart)
+      launchctl stop "$label" 2>/dev/null || true
+      sleep 1
+      launchctl start "$label"
+      ok "Restarted."
+      ;;
+    status)
+      if launchctl list "$label" &>/dev/null; then
+        ok "Running:"
+        launchctl list "$label"
+      else
+        warn "Not running (or not loaded)."
+      fi
+      ;;
+    logs)
+      echo "=== stdout ($log_file) ==="
+      tail -f "$log_file" "$err_file"
+      ;;
+    *)
+      err "Usage: wormhole service {install|uninstall|start|stop|restart|status|logs}"
+      exit 1
+      ;;
+  esac
+}
+
+# ── Claude Code launcher ──
+
+cmd_cld() {
+  local default_args="${CLD_ARGS:---dangerously-skip-permissions}"
+
+  # Already inside tmux? Just run claude.
+  if [ -n "${TMUX:-}" ]; then
+    exec claude $default_args "$@"
+  fi
+
+  if ! command -v tmux &>/dev/null; then
+    err "tmux is not installed (brew install tmux)"
+    exit 1
+  fi
+
+  local project_name
+  project_name=$(basename "$PWD")
+
+  # Find sessions whose working directory matches PWD
+  local sessions
+  sessions=$(tmux list-sessions -F "#{session_name}" 2>/dev/null | while read -r s; do
+    dir=$(tmux display-message -p -t "$s" '#{pane_current_path}' 2>/dev/null)
+    [ "$dir" = "$PWD" ] && echo "$s"
+  done || true)
+
+  local session_name
+  if [ -z "$sessions" ]; then
+    session_name="$project_name"
+  else
+    echo "Sessions for $project_name:"
+    echo ""
+
+    local i=1
+    while IFS= read -r session; do
+      local dir
+      dir=$(tmux display-message -p -t "$session" '#{pane_current_path}' 2>/dev/null | sed "s|$HOME|~|" || echo "")
+      echo "  [$i] $session  ${dir:+($dir)}"
+      ((i++))
+    done <<< "$sessions"
+    echo "  [n] New session (or type a name)"
+    echo ""
+
+    read -rp "Choice: " choice
+
+    if [[ "$choice" =~ ^[0-9]+$ ]]; then
+      session_name=$(echo "$sessions" | sed -n "${choice}p")
+      if [ -z "$session_name" ]; then
+        err "Invalid choice"
+        exit 1
+      fi
+    elif [[ "$choice" == "n" || "$choice" == "N" ]]; then
+      local count
+      count=$(echo "$sessions" | wc -l | tr -d ' ')
+      session_name="${project_name}-$((count + 1))"
+    elif [ -n "$choice" ]; then
+      session_name="$choice"
+    else
+      err "No choice made"
+      exit 1
+    fi
+  fi
+
+  local claude_cmd="claude $default_args $*"
+
+  if tmux has-session -t "$session_name" 2>/dev/null; then
+    log "Attaching to: $session_name"
+    tmux attach -t "$session_name"
+  else
+    log "Creating: $session_name"
+    tmux new-session -s "$session_name" -c "$PWD" "$claude_cmd; exec $SHELL"
+  fi
+}
+
+# ── Claude Code hooks ──
+
+cmd_notify() {
+  # Reads hook event JSON from stdin, POSTs to /api/notify.
+  local input
+  input=$(cat)
+  local notification_type message title tmux_session type
+
+  notification_type=$(echo "$input" | jq -r '.notification_type // "stop"')
+  message=$(echo "$input" | jq -r '.message // "Claude finished"')
+  title=$(echo "$input" | jq -r '.title // ""')
+  tmux_session=$(tmux display-message -p '#{session_name}' 2>/dev/null || echo "unknown")
+
+  case "$notification_type" in
+    permission_prompt) type="permission" ;;
+    idle_prompt)       type="idle" ;;
+    stop)              type="stop"; message="${title:-Claude finished}" ;;
+    *)                 type="$notification_type" ;;
+  esac
+
+  local payload
+  payload=$(jq -cn --arg t "$type" --arg m "$message" --arg s "$tmux_session" \
+    '{type: $t, message: $m, session: $s}')
+
+  curl -s -X POST "$WORMHOLE_URL/api/notify" \
+    -H "Content-Type: application/json" \
+    -d "$payload" \
+    > /dev/null 2>&1
+
+  exit 0
+}
+
+cmd_statusline() {
+  # Receives JSON session data on stdin from Claude Code.
+  if ! command -v jq &>/dev/null; then
+    echo "[statusline] jq not found"
+    exit 0
+  fi
+
+  local input
+  input=$(cat)
+
+  # Extract fields (null-safe)
+  local model dir dir_name pct cost duration_ms lines_added lines_removed
+  model=$(echo "$input" | jq -r '.model.display_name // "?"')
+  dir=$(echo "$input" | jq -r '.workspace.current_dir // ""')
+  dir_name="${dir##*/}"
+  pct=$(echo "$input" | jq -r '.context_window.used_percentage // 0' | cut -d. -f1)
+  cost=$(echo "$input" | jq -r '.cost.total_cost_usd // 0')
+  duration_ms=$(echo "$input" | jq -r '.cost.total_duration_ms // 0')
+  lines_added=$(echo "$input" | jq -r '.cost.total_lines_added // 0')
+  lines_removed=$(echo "$input" | jq -r '.cost.total_lines_removed // 0')
+
+  # Ensure PCT is a valid integer
+  pct=${pct:-0}
+  [[ "$pct" =~ ^[0-9]+$ ]] || pct=0
+
+  # Git info (cached for performance)
+  local cache_key cache_file cache_max_age=5
+  cache_key=$(echo "$dir" | md5sum 2>/dev/null | cut -d' ' -f1 || echo "$dir" | md5 2>/dev/null | cut -d' ' -f1 || echo "default")
+  cache_file="/tmp/statusline-git-${cache_key}"
+
+  _cache_is_stale() {
+    [ ! -f "$cache_file" ] || \
+    [ $(($(date +%s) - $(stat -f %m "$cache_file" 2>/dev/null || stat -c %Y "$cache_file" 2>/dev/null || echo 0))) -gt $cache_max_age ]
+  }
+
+  if _cache_is_stale; then
+    if [ -n "$dir" ] && cd "$dir" 2>/dev/null && git rev-parse --git-dir &>/dev/null; then
+      local branch staged modified
+      branch=$(git branch --show-current 2>/dev/null || echo "")
+      if [ ${#branch} -gt 20 ]; then
+        branch="${branch:0:17}..."
+      fi
+      staged=$(git diff --cached --numstat 2>/dev/null | wc -l | tr -d ' ')
+      modified=$(git diff --numstat 2>/dev/null | wc -l | tr -d ' ')
+      echo "${branch}|${staged}|${modified}" > "$cache_file"
+    else
+      echo "||" > "$cache_file"
+    fi
+  fi
+
+  local branch staged modified
+  IFS='|' read -r branch staged modified < "$cache_file"
+
+  # Line 1: Model, project, git
+  local line1="${CYAN}[${model}]${NC} ${dir_name}"
+
+  if [ -n "$branch" ]; then
+    local git_info=" | ${DIM}${branch}${NC}"
+    [ "${staged:-0}" -gt 0 ] && git_info="${git_info} ${GREEN}+${staged}${NC}"
+    [ "${modified:-0}" -gt 0 ] && git_info="${git_info} ${YELLOW}~${modified}${NC}"
+    line1="${line1}${git_info}"
+  fi
+
+  # Line 2: Context bar, cost, duration, lines
+  local bar_color
+  if [ "$pct" -ge 90 ]; then
+    bar_color="$RED"
+  elif [ "$pct" -ge 70 ]; then
+    bar_color="$YELLOW"
+  else
+    bar_color="$GREEN"
+  fi
+
+  local bar_width=10
+  local filled=$((pct * bar_width / 100))
+  local empty=$((bar_width - filled))
+  local bar=""
+  [ "$filled" -gt 0 ] && bar=$(printf "%${filled}s" | tr ' ' '█')
+  [ "$empty" -gt 0 ] && bar="${bar}$(printf "%${empty}s" | tr ' ' '░')"
+
+  local cost_fmt
+  cost_fmt=$(printf '$%.2f' "$cost")
+  local duration_sec=$((duration_ms / 1000))
+  local mins=$((duration_sec / 60))
+  local secs=$((duration_sec % 60))
+
+  local line2="${bar_color}${bar}${NC} ${pct}%"
+  line2="${line2} | ${YELLOW}${cost_fmt}${NC}"
+  line2="${line2} | ${DIM}${mins}m ${secs}s${NC}"
+
+  if [ "${lines_added:-0}" -gt 0 ] || [ "${lines_removed:-0}" -gt 0 ]; then
+    line2="${line2} | ${GREEN}+${lines_added}${NC}/${RED}-${lines_removed}${NC}"
+  fi
+
+  echo -e "$line1"
+  echo -e "$line2"
+}
+
+# ── Setup ──
+
+cmd_setup() {
+  case "${1:-}" in
+    push)
+      shift
+      _setup_push "$@"
+      ;;
+    *)
+      err "Usage: wormhole setup {push}"
+      exit 1
+      ;;
+  esac
+}
+
+_setup_push() {
+  local env_file="$WORMHOLE_ROOT/.env.local"
+  local subject="${1:-}"
+
+  if [ -z "$subject" ]; then
+    echo "VAPID subject identifies your server to push services (Apple/Google)."
+    echo "Use your Tailscale HTTPS URL or a mailto: address."
+    echo ""
+    read -r -p "Enter VAPID subject (https://... or mailto:...): " subject
+  fi
+
+  if [ -z "$subject" ]; then
+    err "VAPID subject is required."
+    exit 1
+  fi
+
+  if [ -f "$env_file" ] && grep -q "NEXT_PUBLIC_VAPID_PUBLIC_KEY=." "$env_file"; then
+    read -r -p "VAPID keys already exist in .env.local. Overwrite? [y/N] " confirm
+    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+      echo "Aborted."
+      exit 0
+    fi
+  fi
+
+  log "Generating VAPID keys..."
+  local keys public_key private_key
+  keys=$(npx --yes web-push generate-vapid-keys --json 2>/dev/null)
+  public_key=$(echo "$keys" | node -e "process.stdin.on('data',d=>{const k=JSON.parse(d);console.log(k.publicKey)})")
+  private_key=$(echo "$keys" | node -e "process.stdin.on('data',d=>{const k=JSON.parse(d);console.log(k.privateKey)})")
+
+  if [ -z "$public_key" ] || [ -z "$private_key" ]; then
+    err "Failed to generate VAPID keys."
+    exit 1
+  fi
+
+  if [ -f "$env_file" ]; then
+    grep -v '^NEXT_PUBLIC_VAPID_PUBLIC_KEY=' "$env_file" | \
+    grep -v '^VAPID_PRIVATE_KEY=' | \
+    grep -v '^VAPID_SUBJECT=' > "$env_file.tmp"
+    mv "$env_file.tmp" "$env_file"
+  fi
+
+  cat >> "$env_file" <<EOF
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=$public_key
+VAPID_PRIVATE_KEY=$private_key
+VAPID_SUBJECT=$subject
+EOF
+
+  ok "VAPID keys written to .env.local"
+  log "Public:  ${public_key:0:20}..."
+  log "Subject: $subject"
+  echo ""
+  echo "Restart the server to apply: wormhole restart"
+}
+
+# ── Release ──
+
+cmd_release() {
+  local dry_run=false
+  local force_bump=""
+
+  for arg in "$@"; do
+    case "$arg" in
+      --dry-run) dry_run=true ;;
+      patch|minor|major) force_bump="$arg" ;;
+      *) err "Unknown argument: $arg"; exit 1 ;;
+    esac
+  done
+
+  cd "$WORMHOLE_ROOT"
+  local package_json="$WORMHOLE_ROOT/package.json"
+  local changelog="$WORMHOLE_ROOT/CHANGELOG.md"
+
+  # Preflight
+  if ! $dry_run; then
+    if ! git diff --quiet || ! git diff --cached --quiet; then
+      err "Working tree is not clean. Commit or stash changes first."
+      exit 1
+    fi
+  fi
+
+  local current_version
+  current_version=$(grep '"version"' "$package_json" | sed 's/.*"version": *"\([^"]*\)".*/\1/')
+  log "Current version: $current_version"
+
+  local last_tag commit_range
+  last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+  if [ -z "$last_tag" ]; then
+    commit_range="HEAD"
+    log "No previous tag found. Including all commits."
+  else
+    commit_range="${last_tag}..HEAD"
+    log "Last tag: $last_tag"
+  fi
+
+  local commits
+  commits=$(git log "$commit_range" --pretty=format:"%s" 2>/dev/null || true)
+  if [ -z "$commits" ]; then
+    log "No new commits since last tag. Nothing to release."
+    exit 0
+  fi
+
+  # Determine bump type
+  local has_breaking=false has_feat=false
+  while IFS= read -r msg; do
+    echo "$msg" | grep -qiE "^[a-z]+(\(.+\))?!:|BREAKING CHANGE" && has_breaking=true
+    echo "$msg" | grep -qiE "^feat(\(.+\))?:" && has_feat=true
+  done <<< "$commits"
+
+  local bump
+  if [ -n "$force_bump" ]; then
+    bump="$force_bump"
+  elif $has_breaking; then
+    bump="major"
+  elif $has_feat; then
+    bump="minor"
+  else
+    bump="patch"
+  fi
+
+  # Calculate new version
+  local v_major v_minor v_patch
+  IFS='.' read -r v_major v_minor v_patch <<< "$current_version"
+  case "$bump" in
+    major) v_major=$((v_major + 1)); v_minor=0; v_patch=0 ;;
+    minor) v_minor=$((v_minor + 1)); v_patch=0 ;;
+    patch) v_patch=$((v_patch + 1)) ;;
+  esac
+  local new_version="${v_major}.${v_minor}.${v_patch}"
+  log "Bump: $bump -> v$new_version"
+
+  # Build changelog entry
+  local features="" fixes="" performance="" refactoring="" breaking="" other=""
+  while IFS= read -r msg; do
+    local clean
+    clean=$(echo "$msg" | sed 's/^[a-z]*\(([^)]*)\)\?!*: *//')
+    echo "$msg" | grep -qiE "^[a-z]+(\(.+\))?!:|BREAKING CHANGE" && breaking="${breaking}- ${clean}\n"
+    if echo "$msg" | grep -qiE "^feat(\(.+\))?:"; then
+      features="${features}- ${clean}\n"
+    elif echo "$msg" | grep -qiE "^fix(\(.+\))?:"; then
+      fixes="${fixes}- ${clean}\n"
+    elif echo "$msg" | grep -qiE "^perf(\(.+\))?:"; then
+      performance="${performance}- ${clean}\n"
+    elif echo "$msg" | grep -qiE "^refactor(\(.+\))?:"; then
+      refactoring="${refactoring}- ${clean}\n"
+    else
+      echo "$msg" | grep -qiE "^[a-z]+(\(.+\))?!:" || other="${other}- ${clean}\n"
+    fi
+  done <<< "$commits"
+
+  local date_str entry
+  date_str=$(date +%Y-%m-%d)
+  entry="## [${new_version}] - ${date_str}\n"
+  [ -n "$breaking" ]    && entry="${entry}\n### Breaking Changes\n\n${breaking}"
+  [ -n "$features" ]    && entry="${entry}\n### Features\n\n${features}"
+  [ -n "$fixes" ]       && entry="${entry}\n### Bug Fixes\n\n${fixes}"
+  [ -n "$performance" ] && entry="${entry}\n### Performance\n\n${performance}"
+  [ -n "$refactoring" ] && entry="${entry}\n### Refactoring\n\n${refactoring}"
+  [ -n "$other" ]       && entry="${entry}\n### Other\n\n${other}"
+
+  if $dry_run; then
+    echo ""
+    echo "=== DRY RUN ==="
+    echo "Would bump: $current_version -> $new_version ($bump)"
+    echo ""
+    echo "Changelog entry:"
+    echo "---"
+    echo -e "$entry"
+    echo "---"
+    echo ""
+    echo "Actions that would be taken:"
+    echo "  1. Update package.json version to $new_version"
+    echo "  2. Update CHANGELOG.md"
+    echo "  3. git commit -m 'chore(release): v$new_version'"
+    echo "  4. git tag v$new_version"
+    echo "  5. git push origin main --tags"
+    exit 0
+  fi
+
+  # Apply
+  sed -i '' "s/\"version\": \"${current_version}\"/\"version\": \"${new_version}\"/" "$package_json"
+
+  if [ -f "$changelog" ]; then
+    local temp
+    temp=$(mktemp)
+    awk -v entry="$(echo -e "$entry")" '
+      /^# Changelog/ { print; print ""; print entry; found=1; next }
+      { print }
+    ' "$changelog" > "$temp"
+    mv "$temp" "$changelog"
+  else
+    echo -e "# Changelog\n\n${entry}" > "$changelog"
+  fi
+
+  local current_branch
+  current_branch=$(git rev-parse --abbrev-ref HEAD)
+
+  git add package.json CHANGELOG.md
+  git commit -m "chore(release): v${new_version}"
+  git tag "v${new_version}"
+  git push origin "$current_branch" --tags
+
+  ok "Released v${new_version}"
+}
+
+# ── Help ──
+
+cmd_help() {
+  echo "wormhole - Access Claude Code sessions from any device"
+  echo ""
+  echo "Usage: wormhole <command> [args]"
+  echo ""
+  echo "Session:"
+  echo "  cld [args...]              Launch Claude Code in a tmux session"
+  echo ""
+  echo "Server:"
+  echo "  start                      Build-if-needed + start server"
+  echo "  restart                    Kill + rebuild + restart server"
+  echo "  stop                       Stop the server"
+  echo "  status                     Show system health"
+  echo "  monitor [interval] [threshold]  Watchdog (default: 60s, 3 failures)"
+  echo ""
+  echo "Service:"
+  echo "  service install            Build + install launchd agent"
+  echo "  service uninstall          Remove launchd agent"
+  echo "  service start|stop|restart Control the agent"
+  echo "  service status             Check if agent is running"
+  echo "  service logs               Tail server logs"
+  echo ""
+  echo "Hooks (called by Claude Code, not directly):"
+  echo "  notify                     Push notification hook (reads JSON from stdin)"
+  echo "  statusline                 tmux status bar hook (reads JSON from stdin)"
+  echo ""
+  echo "Setup:"
+  echo "  setup push [subject]       Generate VAPID keys for push notifications"
+  echo ""
+  echo "Dev:"
+  echo "  release [patch|minor|major] [--dry-run]  Bump version + changelog + tag"
+  echo ""
+  echo "  help                       Show this help"
+}
+
+# ── Main ──
+
+case "${1:-}" in
+  cld)            shift; cmd_cld "$@" ;;
+  start)          cmd_start ;;
+  restart)        cmd_restart ;;
+  stop)           cmd_stop ;;
+  status)         cmd_status ;;
+  monitor)        shift; cmd_monitor "$@" ;;
+  service)        shift; cmd_service "$@" ;;
+  notify)         cmd_notify ;;
+  statusline)     cmd_statusline ;;
+  setup)          shift; cmd_setup "$@" ;;
+  release)        shift; cmd_release "$@" ;;
+  help|--help|-h|"") cmd_help ;;
+  *)
+    err "Unknown command: $1"
+    cmd_help
+    exit 1
+    ;;
+esac

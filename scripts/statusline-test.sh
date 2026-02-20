@@ -1,13 +1,13 @@
 #!/bin/bash
-# Test harness for statusline.sh
-# Runs the statusline script against mock JSON payloads and validates output.
+# Test harness for wormhole statusline
+# Runs the statusline command against mock JSON payloads and validates output.
 #
 # Usage: ./scripts/statusline-test.sh
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-STATUSLINE="$SCRIPT_DIR/statusline.sh"
+WORMHOLE="$SCRIPT_DIR/../bin/wormhole"
 PASS=0
 FAIL=0
 TOTAL=0
@@ -25,7 +25,7 @@ run_test() {
   local should_not_match="${4:-}"
   TOTAL=$((TOTAL + 1))
 
-  output=$(echo "$json" | "$STATUSLINE" 2>&1)
+  output=$(echo "$json" | "$WORMHOLE" statusline 2>&1)
   # Strip ANSI codes for pattern matching
   clean=$(echo "$output" | sed 's/\x1b\[[0-9;]*m//g')
 
@@ -61,7 +61,7 @@ run_perf_test() {
 
   local start_ns end_ns elapsed_ms
   start_ns=$(date +%s%N 2>/dev/null || python3 -c "import time; print(int(time.time()*1e9))")
-  echo "$json" | "$STATUSLINE" > /dev/null 2>&1
+  echo "$json" | "$WORMHOLE" statusline > /dev/null 2>&1
   end_ns=$(date +%s%N 2>/dev/null || python3 -c "import time; print(int(time.time()*1e9))")
   elapsed_ms=$(( (end_ns - start_ns) / 1000000 ))
 
@@ -79,7 +79,7 @@ run_ansi_test() {
   local json="$2"
   TOTAL=$((TOTAL + 1))
 
-  output=$(echo "$json" | "$STATUSLINE" 2>&1)
+  output=$(echo "$json" | "$WORMHOLE" statusline 2>&1)
 
   # Count opening escape codes (non-reset) vs reset codes
   opens=$(echo "$output" | grep -oE '\x1b\[[0-9;]+m' | grep -v '\[0m' | wc -l | tr -d ' ')
