@@ -178,13 +178,14 @@ export function TerminalView({
         wsRef.current.send(text);
         return;
       }
-    } catch (err) {
-      // NotAllowedError = permission denied (common on mobile Safari)
-      // Don't send Ctrl+V — user was pasting text, not an image
-      if (err instanceof DOMException && err.name === 'NotAllowedError') return;
+      // readText() succeeded but empty — clipboard likely has image
+      wsRef.current?.send('\x16');
+    } catch {
+      // Clipboard API denied (common on mobile Safari) — can't tell if
+      // clipboard has text or image. Send Ctrl+V so image paste works;
+      // for text, user can long-press → Paste in the terminal instead.
+      wsRef.current?.send('\x16');
     }
-    // No text in clipboard (empty or image) — send Ctrl+V for Claude Code's image paste
-    wsRef.current?.send('\x16');
   }, []);
 
   const startListening = useCallback(async () => {

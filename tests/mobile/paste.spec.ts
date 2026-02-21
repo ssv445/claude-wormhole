@@ -69,11 +69,11 @@ test.describe('Paste — Mobile', () => {
     expect(sent).toContain('\x16');
   });
 
-  test('clipboard permission denied → does NOT send Ctrl+V', async ({ page }, testInfo) => {
+  test('clipboard permission denied → sends Ctrl+V (image paste fallback)', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile-webkit', 'Mobile only');
 
-    // Mobile Safari often denies clipboard access — should not fall back to
-    // Ctrl+V which triggers Claude Code's "no image found" warning
+    // Mobile Safari denies clipboard access — can't tell if clipboard has
+    // text or image, so send Ctrl+V to keep image paste working
     await page.addInitScript(() => {
       navigator.clipboard.readText = async () => {
         throw new DOMException('Clipboard access denied', 'NotAllowedError');
@@ -87,7 +87,7 @@ test.describe('Paste — Mobile', () => {
     await pointerDown(page, 'button[title="Paste (Ctrl+V)"]');
     await waitForMessages(page, 500);
 
-    expect(sent).not.toContain('\x16');
+    expect(sent).toContain('\x16');
   });
 });
 
