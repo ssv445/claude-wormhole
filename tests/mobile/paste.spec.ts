@@ -49,6 +49,26 @@ test.describe('Paste', () => {
     expect(sent).toContain('\x16');
   });
 
+  test('clipboard read throws non-permission error → sends Ctrl+V for image paste', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-webkit', 'Mobile only');
+
+    // Stub clipboard.readText to throw a generic error (e.g. clipboard has image, no text)
+    await page.addInitScript(() => {
+      navigator.clipboard.readText = async () => {
+        throw new DOMException('No text on clipboard', 'DataError');
+      };
+    });
+
+    const sent = await setupTerminalMocks(page);
+    await openTerminalSession(page);
+
+    clearMessages(sent);
+    await pointerDown(page, 'button[title="Paste (Ctrl+V)"]');
+    await waitForMessages(page, 500);
+
+    expect(sent).toContain('\x16');
+  });
+
   test('clipboard permission denied → does NOT send Ctrl+V', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile-webkit', 'Mobile only');
 

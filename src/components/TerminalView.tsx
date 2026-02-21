@@ -178,13 +178,13 @@ export function TerminalView({
         wsRef.current.send(text);
         return;
       }
-      // readText() succeeded but returned empty — clipboard may have image
-      // Send Ctrl+V for Claude Code's image paste
-      wsRef.current?.send('\x16');
-    } catch {
-      // Clipboard access denied (common on mobile Safari) — don't send Ctrl+V
-      // as that triggers Claude Code's "no image found in clipboard" warning
+    } catch (err) {
+      // NotAllowedError = permission denied (common on mobile Safari)
+      // Don't send Ctrl+V — user was pasting text, not an image
+      if (err instanceof DOMException && err.name === 'NotAllowedError') return;
     }
+    // No text in clipboard (empty or image) — send Ctrl+V for Claude Code's image paste
+    wsRef.current?.send('\x16');
   }, []);
 
   const startListening = useCallback(async () => {
