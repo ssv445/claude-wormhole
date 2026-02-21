@@ -300,7 +300,7 @@ export async function stubBrowserAPIs(page: Page): Promise<void> {
   await page.addInitScript(() => {
     // Track vibrate calls
     (window as any).__vibrateCalls = [] as number[][];
-    navigator.vibrate = (pattern: VibratePattern) => {
+    (navigator as any).vibrate = (pattern: VibratePattern) => {
       const arr = typeof pattern === 'number' ? [pattern] : [...pattern];
       (window as any).__vibrateCalls.push(arr);
       return true;
