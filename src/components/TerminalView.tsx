@@ -160,6 +160,8 @@ export function TerminalView({
   const composeTextRef = useRef('');
   const speechRef = useRef<SpeechRecognitionInstance | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // When compose opens for paste (not voice), don't append Enter on send
+  const composeModeRef = useRef<'voice' | 'paste'>('voice');
 
   // Selection mode state (mobile long-press to select text)
   const [selectionMode, setSelectionMode] = useState(false);
@@ -171,6 +173,10 @@ export function TerminalView({
     wsRef.current?.send(key);
   }, []);
 
+  // Text paste: reads clipboard text via API (works on desktop/Android).
+  // On iOS Safari where readText() always throws NotAllowedError, opens
+  // the compose overlay so the user can paste into a <textarea> (iOS
+  // allows native paste into input fields), then send via WebSocket.
   const handlePaste = useCallback(async () => {
     try {
       const text = await navigator.clipboard.readText();
@@ -179,9 +185,23 @@ export function TerminalView({
         return;
       }
     } catch {
-      // clipboard access denied or empty — fall through
+      // Clipboard API denied (always on iOS Safari) — open compose overlay
+      // so user can paste into a textarea where iOS allows it
+      composeModeRef.current = 'paste';
+      setShowCompose(true);
+      setComposeText('');
+      requestAnimationFrame(() => textareaRef.current?.focus());
+      return;
     }
-    // No text in clipboard — send Ctrl+V for Claude Code's image paste
+    // Empty clipboard — also open compose as fallback
+    composeModeRef.current = 'paste';
+    setShowCompose(true);
+    setComposeText('');
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, []);
+
+  // Image paste: sends Ctrl+V so Claude Code can handle image from clipboard
+  const handleImagePaste = useCallback(() => {
     wsRef.current?.send('\x16');
   }, []);
 
@@ -266,6 +286,7 @@ export function TerminalView({
   }, []);
 
   const openCompose = useCallback(() => {
+    composeModeRef.current = 'voice';
     setShowCompose(true);
     setComposeText('');
     startListening();
@@ -278,7 +299,9 @@ export function TerminalView({
     // Read from ref to avoid stale closure — composeText state may lag behind
     const text = composeTextRef.current;
     if (send && text.trim() && wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(text + '\r');
+      // Voice mode appends Enter to submit; paste mode sends raw text
+      // so user can paste into a prompt without auto-submitting
+      wsRef.current.send(composeModeRef.current === 'voice' ? text + '\r' : text);
     }
     setShowCompose(false);
     setComposeText('');
@@ -808,7 +831,7 @@ export function TerminalView({
             ref={textareaRef}
             value={composeText}
             onChange={(e) => setComposeText(e.target.value)}
-            placeholder="Speak or type..."
+            placeholder={composeModeRef.current === 'paste' ? 'Paste here, then tap Send' : 'Speak or type...'}
             rows={3}
             className="w-full bg-transparent text-gray-100 text-sm font-mono p-3 resize-none focus:outline-none placeholder-gray-500"
             style={{ maxHeight: '8rem' }}
@@ -857,14 +880,28 @@ export function TerminalView({
         >
           <span className="text-xs font-mono font-bold">Esc</span>
         </button>
-        {/* Paste — tries clipboard text first, falls back to Ctrl+V for image paste */}
+        {/* Text paste — tries Clipboard API, falls back to compose overlay on iOS
+            where readText() always throws NotAllowedError. Uses onPointerDown
+            WITHOUT preventDefault() to preserve user activation for clipboard API. */}
         <button
-          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); handlePaste(); }}
+          onPointerDown={(e) => { e.stopPropagation(); handlePaste(); }}
           className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
-          title="Paste (Ctrl+V)"
+          title="Paste text"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
             <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+        </button>
+        {/* Image paste — sends Ctrl+V so Claude Code handles image from clipboard */}
+        <button
+          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); handleImagePaste(); }}
+          className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
+          title="Paste image (Ctrl+V)"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <polyline points="21 15 16 10 5 21" />
           </svg>
         </button>
         {/* Mic — opens compose overlay with voice input */}
