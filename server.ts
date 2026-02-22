@@ -40,6 +40,9 @@ console.log(`Build version: ${BUILD_VERSION}`);
 const SESSION_NAME_RE = /^[a-zA-Z0-9_-]+$/;
 
 app.prepare().then(() => {
+  // Clean up stale temp files from previous server runs
+  try { rmSync('/tmp/wormhole-attach', { recursive: true, force: true }); } catch { /* ignore */ }
+
   const server = createServer((req, res) => {
     // Prevent iOS from HTTP-caching sw.js — stale SW causes PWA deadlock
     if (req.url === '/sw.js') {
@@ -155,8 +158,9 @@ app.prepare().then(() => {
         } catch { /* already closed */ }
         leakedMasterFd = null;
       }
-      // Clean up temp files for this session
-      try { rmSync(join('/tmp', 'wormhole-attach', session), { recursive: true, force: true }); } catch { /* ignore */ }
+      // Don't delete temp files here — iOS backgrounding kills WS, but the
+      // file path is already in the PTY input. Claude Code needs it after reconnect.
+      // Cleanup happens at server startup instead.
       if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
         ws.close();
       }
