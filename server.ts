@@ -195,8 +195,9 @@ app.prepare().then(() => {
               const filePath = join(dir, safeName);
               writeFileSync(filePath, Buffer.from(data, 'base64'));
               // Type the path directly into the PTY — avoids client round-trip
-              // which can fail if the WS connection drops (iOS heartbeat timeout)
-              ptyProcess.write(filePath);
+              // which can fail if the WS connection drops (iOS heartbeat timeout).
+              // Space separates from existing text, @ tells Claude Code to reference the file.
+              ptyProcess.write(` @${filePath} `);
               ws.send(JSON.stringify({ type: 'file_saved', path: filePath, originalName: name }));
             } catch (err) {
               const message = err instanceof Error ? err.message : 'File save failed';
