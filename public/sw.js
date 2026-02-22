@@ -1,53 +1,21 @@
 // Service worker for claude-wormhole PWA
-// v3 — bust after claude-bridge → claude-wormhole rebrand
+// v4 — no caching, push notifications only
+// Why: stale cached JS caused input-breaking bugs on iOS PWA.
+// Next.js handles its own asset caching via hashed filenames.
 
-// Cache app shell on install
-const CACHE_NAME = 'claude-wormhole-v3';
-const SHELL_URLS = ['/', '/manifest.json'];
-
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_URLS))
-  );
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  // Purge all caches and rebuild — no manual version bumps needed.
-  // Any change to this file triggers a new SW install, which clears stale content.
+  // Purge ALL existing caches from previous versions
   event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
-      .then(() => caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_URLS)))
+    caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
   );
   self.clients.claim();
 });
 
-// Network-first for HTML, cache-first for static assets
-self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-
-  // Skip WebSocket and API requests
-  if (
-    event.request.url.includes('/api/') ||
-    event.request.headers.get('upgrade') === 'websocket'
-  ) {
-    return;
-  }
-
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        // Cache successful GET responses
-        if (event.request.method === 'GET' && response.ok) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
-        return response;
-      })
-      .catch(() => caches.match(event.request))
-  );
-});
+// No fetch handler — let all requests go to network directly
 
 // Push notification handler
 self.addEventListener('push', (event) => {

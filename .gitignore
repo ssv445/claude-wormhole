@@ -5,3 +5,4 @@ dist/
 .env.local
 data/
 test-results/
+build-version.json

@@ -153,6 +153,10 @@ export function TerminalView({
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [termReady, setTermReady] = useState(false);
 
+  // Version mismatch detection — PWA may serve stale cached code
+  const [versionStale, setVersionStale] = useState(false);
+  const serverVersionRef = useRef<string | null>(null);
+
   // Voice input + compose overlay state
   const [isListening, setIsListening] = useState(false);
   const [showCompose, setShowCompose] = useState(false);
@@ -467,7 +471,7 @@ export function TerminalView({
       };
 
       ws.onmessage = (e) => {
-        // Check for JSON control messages from server (file_saved, file_error)
+        // Check for JSON control messages from server
         const raw = e.data;
         if (typeof raw === 'string' && raw.startsWith('{')) {
           try {
@@ -482,8 +486,17 @@ export function TerminalView({
               term.write(`\r\n\x1b[31mAttach error: ${msg.message}\x1b[0m\r\n`);
               return;
             }
+            if (msg.type === 'version') {
+              serverVersionRef.current = msg.v;
+              const clientVersion = process.env.NEXT_PUBLIC_BUILD_VERSION || 'unknown';
+              if (msg.v !== clientVersion && clientVersion !== 'unknown') {
+                console.warn(`[version] stale client: client=${clientVersion} server=${msg.v}`);
+                setVersionStale(true);
+              }
+              return;
+            }
           } catch {
-            // Not JSON — fall through to normal terminal write
+            // Not valid JSON — fall through to normal terminal write
           }
         }
         term.write(forceTextPresentation(raw));
@@ -822,6 +835,28 @@ export function TerminalView({
                 Done
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Version mismatch banner — PWA serving stale cached code */}
+        {versionStale && (
+          <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-3 py-2 bg-orange-600/90 backdrop-blur-sm">
+            <span className="text-white text-xs font-mono">Update available</span>
+            <button
+              onClick={() => {
+                // Hard reload: bypass service worker cache
+                if ('serviceWorker' in navigator) {
+                  navigator.serviceWorker.getRegistrations().then(regs =>
+                    Promise.all(regs.map(r => r.unregister()))
+                  ).then(() => location.reload());
+                } else {
+                  location.reload();
+                }
+              }}
+              className="px-3 py-1 bg-white/20 rounded text-white text-xs font-mono font-bold active:bg-white/40"
+            >
+              Reload
+            </button>
           </div>
         )}
 
