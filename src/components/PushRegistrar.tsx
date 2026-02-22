@@ -24,7 +24,12 @@ export function PushRegistrar() {
 
     async function check() {
       try {
-        const reg = await navigator.serviceWorker.register('/sw.js');
+        // updateViaCache: 'none' bypasses HTTP cache for sw.js on iOS
+        const reg = await navigator.serviceWorker.register('/sw.js', {
+          updateViaCache: 'none',
+        });
+        // Force iOS PWA to check for new SW on every launch
+        reg.update().catch(() => {});
         await navigator.serviceWorker.ready;
         const existing = await reg.pushManager.getSubscription();
         if (existing) {

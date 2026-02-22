@@ -39,6 +39,10 @@ const SESSION_NAME_RE = /^[a-zA-Z0-9_-]+$/;
 
 app.prepare().then(() => {
   const server = createServer((req, res) => {
+    // Prevent iOS from HTTP-caching sw.js — stale SW causes PWA deadlock
+    if (req.url === '/sw.js') {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
     const parsedUrl = parse(req.url!, true);
     handle(req, res, parsedUrl);
   });
