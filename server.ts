@@ -1,6 +1,6 @@
 import { createServer } from 'http';
-import { closeSync, existsSync, mkdirSync, rmSync } from 'fs';
-import { writeFile } from 'fs/promises';
+import { closeSync, existsSync, rmSync } from 'fs';
+import { writeFile, mkdir } from 'fs/promises';
 import { parse } from 'url';
 import { join, extname } from 'path';
 import { randomBytes } from 'crypto';
@@ -187,7 +187,8 @@ app.prepare().then(() => {
               try {
                 const { name, data } = parsed;
                 // Server-side size cap: ~10MB decoded (base64 is ~33% larger)
-                if (!name || !data || data.length > 14 * 1024 * 1024) {
+                const MAX_BASE64_BYTES = 14 * 1024 * 1024;
+                if (!name || !data || typeof name !== 'string' || typeof data !== 'string' || data.length > MAX_BASE64_BYTES) {
                   ws.send(JSON.stringify({ type: 'file_error', message: 'Missing, empty, or oversized payload (max 10MB)' }));
                   return;
                 }
@@ -196,7 +197,7 @@ app.prepare().then(() => {
                 const ext = rawExt ? '.' + rawExt : '';
                 const safeName = randomBytes(8).toString('hex') + ext;
                 const dir = join('/tmp', 'wormhole-attach', session);
-                mkdirSync(dir, { recursive: true });
+                await mkdir(dir, { recursive: true });
                 const filePath = join(dir, safeName);
                 await writeFile(filePath, Buffer.from(data, 'base64'));
                 // Type the path directly into the PTY — avoids client round-trip

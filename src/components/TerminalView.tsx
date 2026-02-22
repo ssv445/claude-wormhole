@@ -198,17 +198,17 @@ export function TerminalView({
         wsRef.current.send(text);
         return;
       }
-      // readText() succeeded but returned empty — clipboard may have image
-      // Send Ctrl+V for Claude Code's image paste
+      // readText() succeeded but returned empty — clipboard may have image.
+      // On desktop, send Ctrl+V so Claude Code can handle image paste natively.
+      // Then open compose overlay as fallback for iOS where Ctrl+V won't work.
       wsRef.current?.send('\x16');
+      openComposeForPaste();
+      return;
     } catch {
       // Clipboard API denied (always on iOS Safari) — open compose overlay
       // so user can paste into a textarea where iOS allows it
       openComposeForPaste();
-      return;
     }
-    // Empty clipboard — also open compose as fallback
-    openComposeForPaste();
   }, [openComposeForPaste]);
 
   // File attach: opens native file picker directly.
