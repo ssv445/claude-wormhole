@@ -5,7 +5,6 @@ import {
   waitForMessages,
   clearMessages,
   stubBrowserAPIs,
-  pointerDown,
 } from '../helpers/terminal';
 
 test.describe('File Attach — Mobile', () => {
@@ -13,44 +12,8 @@ test.describe('File Attach — Mobile', () => {
     await stubBrowserAPIs(page);
   });
 
-  test('clipboard has image → reads blob, sends file_attach over WS', async ({ page }, testInfo) => {
+  test('attach button opens file picker', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile-webkit', 'Mobile only');
-
-    // Mock clipboard.read() to return an image blob
-    await page.addInitScript(() => {
-      const fakeBlob = new Blob(['fake-png-data'], { type: 'image/png' });
-      (navigator.clipboard as any).read = async () => [{
-        types: ['image/png'],
-        getType: async () => fakeBlob,
-      }];
-    });
-
-    const sent = await setupTerminalMocks(page);
-    await openTerminalSession(page);
-
-    clearMessages(sent);
-    await pointerDown(page, 'button[title="Attach file"]');
-    await waitForMessages(page, 1000);
-
-    // Should have sent a file_attach JSON message
-    const attachMsg = sent.find(m => m.startsWith('{') && m.includes('file_attach'));
-    expect(attachMsg).toBeTruthy();
-    const parsed = JSON.parse(attachMsg!);
-    expect(parsed.type).toBe('file_attach');
-    expect(parsed.name).toBe('clipboard.png');
-    expect(parsed.data).toBeTruthy();
-  });
-
-  test('clipboard empty → opens file picker', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== 'mobile-webkit', 'Mobile only');
-
-    // Mock clipboard.read() to return empty items
-    await page.addInitScript(() => {
-      (navigator.clipboard as any).read = async () => [{
-        types: ['text/plain'],
-        getType: async () => new Blob(['text'], { type: 'text/plain' }),
-      }];
-    });
 
     await setupTerminalMocks(page);
     await openTerminalSession(page);
@@ -61,39 +24,11 @@ test.describe('File Attach — Mobile', () => {
         const input = document.querySelector('input[type="file"]') as HTMLInputElement;
         if (!input) { resolve(false); return; }
         input.addEventListener('click', () => resolve(true), { once: true });
-        // Timeout after 2s
         setTimeout(() => resolve(false), 2000);
       });
     });
 
-    await pointerDown(page, 'button[title="Attach file"]');
-    const clicked = await fileInputClicked;
-    expect(clicked).toBe(true);
-  });
-
-  test('clipboard denied → opens file picker', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== 'mobile-webkit', 'Mobile only');
-
-    // Mock clipboard.read() to throw
-    await page.addInitScript(() => {
-      (navigator.clipboard as any).read = async () => {
-        throw new DOMException('Clipboard access denied', 'NotAllowedError');
-      };
-    });
-
-    await setupTerminalMocks(page);
-    await openTerminalSession(page);
-
-    const fileInputClicked = page.evaluate(() => {
-      return new Promise<boolean>((resolve) => {
-        const input = document.querySelector('input[type="file"]') as HTMLInputElement;
-        if (!input) { resolve(false); return; }
-        input.addEventListener('click', () => resolve(true), { once: true });
-        setTimeout(() => resolve(false), 2000);
-      });
-    });
-
-    await pointerDown(page, 'button[title="Attach file"]');
+    await page.click('button[title="Attach file"]');
     const clicked = await fileInputClicked;
     expect(clicked).toBe(true);
   });
@@ -127,13 +62,11 @@ test.describe('File Attach — Mobile', () => {
     expect(parsed.data).toBeTruthy();
   });
 
-  test('server file_saved response auto-types path into terminal', async ({ page }, testInfo) => {
+  test('server file_saved response resets attach status (path typed server-side)', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile-webkit', 'Mobile only');
 
-    const sent = await setupTerminalMocks(page);
+    await setupTerminalMocks(page);
     await openTerminalSession(page);
-
-    clearMessages(sent);
 
     // Trigger a file attach that the mock WS will respond to with file_saved
     await page.evaluate(() => {
@@ -146,12 +79,11 @@ test.describe('File Attach — Mobile', () => {
       input.dispatchEvent(new Event('change', { bubbles: true }));
     });
 
-    await waitForMessages(page, 1500);
+    await waitForMessages(page, 1000);
 
-    // After the mock responds with file_saved, the client should send the path
-    const pathMsg = sent.find(m => m.startsWith('/tmp/wormhole-attach/'));
-    expect(pathMsg).toBeTruthy();
-    expect(pathMsg).toContain('photo.jpg');
+    // Attach button should not be disabled (status back to idle after file_saved)
+    const btn = page.locator('button[title="Attach file"]');
+    await expect(btn).toBeEnabled({ timeout: 3000 });
   });
 
   test('file > 10MB shows alert', async ({ page }, testInfo) => {

@@ -175,6 +175,9 @@ app.prepare().then(() => {
               mkdirSync(dir, { recursive: true });
               const filePath = join(dir, safeName);
               writeFileSync(filePath, Buffer.from(data, 'base64'));
+              // Type the path directly into the PTY — avoids client round-trip
+              // which can fail if the WS connection drops (iOS heartbeat timeout)
+              ptyProcess.write(filePath);
               ws.send(JSON.stringify({ type: 'file_saved', path: filePath, originalName: name }));
             } catch (err) {
               const message = err instanceof Error ? err.message : 'File save failed';

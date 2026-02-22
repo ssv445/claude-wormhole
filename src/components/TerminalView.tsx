@@ -232,32 +232,27 @@ export function TerminalView({
     reader.readAsDataURL(file);
     // Reset so selecting the same file again still triggers onChange
     e.target.value = '';
+    // Refocus terminal after file selection
+    xtermRef.current?.focus();
   }, [sendFileBase64]);
 
-  const handleFileAttach = useCallback(async () => {
-    // Try clipboard image first (iOS screenshots, copied photos)
-    try {
-      const items = await navigator.clipboard.read();
-      for (const item of items) {
-        const imageType = item.types.find(t => t === 'image/png' || t === 'image/jpeg');
-        if (imageType) {
-          const blob = await item.getType(imageType);
-          const reader = new FileReader();
-          reader.onload = () => {
-            const base64 = (reader.result as string).split(',')[1];
-            const ext = imageType === 'image/jpeg' ? 'jpg' : 'png';
-            sendFileBase64(`clipboard.${ext}`, base64);
-          };
-          reader.readAsDataURL(blob);
-          return;
-        }
-      }
-    } catch {
-      // Clipboard API denied or not available — fall through to file picker
+  // Open the native file picker directly. clipboard.read() is async and
+  // burns the user activation on iOS — by the time it rejects, input.click()
+  // is silently ignored. The iOS file picker already offers Photos, Camera,
+  // and Files so users can pick screenshots/photos from there.
+  const handleFileAttach = useCallback(() => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+      // Refocus terminal when picker closes (covers cancel — no change event fires).
+      // iOS fires focus on the window when the picker dismisses.
+      const refocus = () => {
+        window.removeEventListener('focus', refocus);
+        // Short delay — iOS needs a moment after picker dismissal
+        setTimeout(() => xtermRef.current?.focus(), 300);
+      };
+      window.addEventListener('focus', refocus);
     }
-    // No clipboard image found — open file picker
-    fileInputRef.current?.click();
-  }, [sendFileBase64]);
+  }, []);
 
   const startListening = useCallback(async () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -477,10 +472,7 @@ export function TerminalView({
             const msg = JSON.parse(raw);
             if (msg.type === 'file_saved') {
               setAttachStatus('idle');
-              // Auto-type the file path at the cursor
-              if (wsRef.current?.readyState === WebSocket.OPEN) {
-                wsRef.current.send(msg.path);
-              }
+              // Path is typed into the PTY server-side — no client round-trip needed
               return;
             }
             if (msg.type === 'file_error') {
@@ -947,7 +939,7 @@ export function TerminalView({
         </div>
       )}
 
-      {/* Bottom bar - Mobile only: Paste | ↑ | Keyboard | ↓ | Enter */}
+      {/* Bottom bar - Mobile only: Esc | Paste | Attach | Mic | I | ↑ | ⌨ | ↓ | Enter */}
       <div className="shrink-0 md:hidden h-11 bg-gray-900/90 backdrop-blur-sm border-t border-gray-700/50 flex items-center justify-around">
         {/* Escape */}
         <button
@@ -961,7 +953,6 @@ export function TerminalView({
             where readText() always throws NotAllowedError. Uses onPointerDown
             WITHOUT preventDefault() to preserve user activation for clipboard API. */}
         <button
-          // No preventDefault — preserves user activation required for clipboard.readText()
           onPointerDown={(e) => { e.stopPropagation(); handlePaste(); }}
           className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
           title="Paste text"
@@ -970,7 +961,8 @@ export function TerminalView({
             <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
           </svg>
         </button>
-        {/* File attach — tries clipboard image, falls back to file picker */}
+        {/* File attach — opens file picker directly (no async clipboard.read()
+            which burns iOS user activation before input.click() can fire) */}
         <input
           ref={fileInputRef}
           type="file"
@@ -979,7 +971,7 @@ export function TerminalView({
           onChange={handleFileSelected}
         />
         <button
-          onPointerDown={(e) => { e.stopPropagation(); handleFileAttach(); }}
+          onClick={handleFileAttach}
           className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
           title="Attach file"
           disabled={attachStatus === 'uploading'}
