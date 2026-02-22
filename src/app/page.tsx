@@ -218,7 +218,7 @@ export default function Home() {
         className="w-full px-4 py-2 border-t border-border text-[10px] text-muted font-mono text-left hover:text-secondary transition-colors"
         title="Force reload"
       >
-        v1.0.0 · {process.env.NEXT_PUBLIC_GIT_HASH ?? 'dev'} ↻
+        v1.0.0 · {process.env.NEXT_PUBLIC_GIT_HASH ?? 'dev'} · b{process.env.NEXT_PUBLIC_BUILD_VERSION?.slice(-6) ?? '?'} ↻
       </button>
     </>
   );
