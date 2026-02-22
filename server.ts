@@ -40,8 +40,24 @@ console.log(`Build version: ${BUILD_VERSION}`);
 const SESSION_NAME_RE = /^[a-zA-Z0-9_-]+$/;
 
 app.prepare().then(() => {
-  // Clean up stale temp files from previous server runs
-  try { rmSync('/tmp/wormhole-attach', { recursive: true, force: true }); } catch { /* ignore */ }
+  // Clean up temp files older than 30 days — sessions may resume after server restart,
+  // so we can't delete everything. Only prune genuinely stale files.
+  try {
+    const attachRoot = '/tmp/wormhole-attach';
+    if (existsSync(attachRoot)) {
+      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      const { readdirSync, statSync } = require('fs');
+      for (const sessionDir of readdirSync(attachRoot)) {
+        const dirPath = join(attachRoot, sessionDir);
+        try {
+          const stat = statSync(dirPath);
+          if (stat.isDirectory() && stat.mtimeMs < thirtyDaysAgo) {
+            rmSync(dirPath, { recursive: true, force: true });
+          }
+        } catch { /* ignore per-dir errors */ }
+      }
+    }
+  } catch { /* ignore */ }
 
   const server = createServer((req, res) => {
     // Prevent iOS from HTTP-caching sw.js — stale SW causes PWA deadlock
