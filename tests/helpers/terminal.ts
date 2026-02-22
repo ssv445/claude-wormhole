@@ -13,9 +13,9 @@ export type WsMessages = string[];
  */
 export async function setupTerminalMocks(
   page: Page,
-  opts: { enableMouseTracking?: boolean } = {}
+  opts: { enableMouseTracking?: boolean; serverVersion?: string } = {}
 ): Promise<WsMessages> {
-  const { enableMouseTracking = false } = opts;
+  const { enableMouseTracking = false, serverVersion } = opts;
   const sent: WsMessages = [];
 
   // Mock /api/sessions — return fixture data
@@ -47,6 +47,10 @@ export async function setupTerminalMocks(
         // Enable VT200 mouse tracking + SGR encoding so xterm.js enters
         // a mouse tracking mode (required for selection mode to activate)
         ws.send('\x1b[?1000h\x1b[?1006h');
+      }
+      // Send version control message before terminal data (mirrors real server behavior)
+      if (serverVersion) {
+        ws.send(JSON.stringify({ type: 'version', v: serverVersion }));
       }
       ws.send('Welcome to mock terminal\r\n$ ');
     });
