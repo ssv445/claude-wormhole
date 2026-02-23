@@ -5,7 +5,9 @@
 set -euo pipefail
 
 WORMHOLE_ROOT="$(cd "$(dirname "$0")" && pwd)"
-WORMHOLE_PORT="${WORMHOLE_PORT:-3100}"
+# Load .env.local for PORT if present
+[ -f "$WORMHOLE_ROOT/.env.local" ] && set -a && source "$WORMHOLE_ROOT/.env.local" && set +a
+WORMHOLE_PORT="${PORT:-${WORMHOLE_PORT:-3100}}"
 
 # Colors
 RED='\033[0;31m'
