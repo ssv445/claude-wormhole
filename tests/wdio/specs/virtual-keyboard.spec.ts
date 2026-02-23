@@ -1,5 +1,7 @@
 import { browser, $, expect } from '@wdio/globals';
-import { navigateToSession, tapButton, getTmuxPaneContent } from '../helpers/terminal.js';
+import {
+  navigateToSession, tapButton, getTmuxPaneContent, isTextVisibleInPage,
+} from '../helpers/terminal.js';
 
 describe('Virtual Keyboard', () => {
   beforeEach(async () => {
@@ -7,14 +9,7 @@ describe('Virtual Keyboard', () => {
   });
 
   it('should be hidden by default', async () => {
-    const visible = await browser.execute(() => {
-      const el = document.evaluate(
-        "//*[contains(text(),'Virtual Keyboard')]",
-        document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null,
-      ).singleNodeValue;
-      return el ? (el as HTMLElement).offsetParent !== null : false;
-    });
-    expect(visible).toBe(false);
+    expect(await isTextVisibleInPage('Virtual Keyboard')).toBe(false);
   });
 
   it('should render all 7 sections', async () => {
@@ -38,31 +33,13 @@ describe('Virtual Keyboard', () => {
     await tapButton('Show keyboard');
     await browser.pause(300);
 
-    // Find and tap the ^C / Interrupt button
-    const ctrlC = await $('button[title="Interrupt"]');
-    await ctrlC.waitForDisplayed({ timeout: 3000 });
-
-    const location = await ctrlC.getLocation();
-    const size = await ctrlC.getSize();
-    await browser.performActions([
-      {
-        type: 'pointer',
-        id: 'finger1',
-        parameters: { pointerType: 'touch' },
-        actions: [
-          { type: 'pointerMove', duration: 0, x: Math.round(location.x + size.width / 2), y: Math.round(location.y + size.height / 2) },
-          { type: 'pointerDown', button: 0 },
-          { type: 'pause', duration: 50 },
-          { type: 'pointerUp', button: 0 },
-        ],
-      },
-    ]);
-    await browser.releaseActions();
+    // Use tapButton helper instead of inlining pointer actions
+    await tapButton('Interrupt');
     await browser.pause(1000);
 
     // Verify tmux pane shows prompt (Claude Code interrupted or already at prompt)
     const pane = getTmuxPaneContent();
-    const hasPrompt = pane.includes('\u276f') || pane.includes('>') || pane.includes('$');
+    const hasPrompt = pane.includes('\u276f') || /^>\s/m.test(pane);
     expect(hasPrompt).toBe(true);
   });
 
@@ -70,29 +47,15 @@ describe('Virtual Keyboard', () => {
     await tapButton('Show keyboard');
     await browser.pause(300);
 
-    const tabBtn = await $('button[title="Tab/Autocomplete"]');
-    await tabBtn.waitForDisplayed({ timeout: 3000 });
+    const before = getTmuxPaneContent();
 
-    const location = await tabBtn.getLocation();
-    const size = await tabBtn.getSize();
-    await browser.performActions([
-      {
-        type: 'pointer',
-        id: 'finger1',
-        parameters: { pointerType: 'touch' },
-        actions: [
-          { type: 'pointerMove', duration: 0, x: Math.round(location.x + size.width / 2), y: Math.round(location.y + size.height / 2) },
-          { type: 'pointerDown', button: 0 },
-          { type: 'pause', duration: 50 },
-          { type: 'pointerUp', button: 0 },
-        ],
-      },
-    ]);
-    await browser.releaseActions();
+    // Use tapButton helper instead of inlining pointer actions
+    await tapButton('Tab/Autocomplete');
     await browser.pause(500);
 
-    // Terminal responded — just verify pane is readable
-    const pane = getTmuxPaneContent();
-    expect(typeof pane).toBe('string');
+    // Tab at the prompt may trigger autocomplete, changing the pane.
+    // At minimum the session should still be alive with content.
+    const after = getTmuxPaneContent();
+    expect(after.trim().length).toBeGreaterThan(0);
   });
 });

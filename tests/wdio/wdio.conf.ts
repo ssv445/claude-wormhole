@@ -1,10 +1,10 @@
 import path from 'path';
 import url from 'url';
 import { execSync } from 'child_process';
+import { SESSION_NAME } from './helpers/terminal.js';
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 
-const SESSION_NAME = 'wdio-test';
 const WORKSPACE = '/tmp/wdio-test-workspace';
 
 export const config: WebdriverIO.Config = {
@@ -48,20 +48,23 @@ export const config: WebdriverIO.Config = {
     // Clean up any leftover session
     try { execSync(`tmux kill-session -t ${SESSION_NAME} 2>/dev/null`); } catch {}
 
-    // Create workspace and tmux session
+    // Create workspace and tmux session.
+    // --dangerously-skip-permissions: required so Claude Code doesn't block on
+    // permission prompts during automated tests. Only used on local dev machines
+    // — do NOT run on shared/privileged CI runners without sandboxing.
     execSync(`mkdir -p ${WORKSPACE}`);
     execSync(
       `tmux new-session -d -s ${SESSION_NAME} -c ${WORKSPACE} "claude --dangerously-skip-permissions; exec $SHELL"`,
     );
 
-    // Wait for Claude Code to show the prompt (up to 30s)
+    // Wait for Claude Code to show the ❯ prompt (up to 30s).
+    // Match the actual prompt character ❯ or a > at line start (not mid-line >).
     const deadline = Date.now() + 30000;
     let ready = false;
     while (Date.now() < deadline) {
       try {
         const pane = execSync(`tmux capture-pane -p -t ${SESSION_NAME}`, { encoding: 'utf-8' });
-        // Claude Code shows its prompt character when ready
-        if (pane.includes('\u276f') || pane.includes('>')) {
+        if (pane.includes('\u276f') || /^>\s/m.test(pane)) {
           ready = true;
           break;
         }
@@ -70,7 +73,23 @@ export const config: WebdriverIO.Config = {
     }
 
     if (!ready) {
-      console.warn('Warning: Claude Code prompt not detected after 30s, proceeding anyway');
+      throw new Error('Claude Code prompt not detected after 30s — aborting test run');
+    }
+
+    // Generate scrollback so scroll tests have real content to scroll through.
+    // /help is a safe local command that produces ~30 lines of output.
+    execSync(`tmux send-keys -t ${SESSION_NAME} '/help' Enter`);
+    // Wait for /help output to render
+    const helpDeadline = Date.now() + 15000;
+    while (Date.now() < helpDeadline) {
+      try {
+        const pane = execSync(`tmux capture-pane -p -t ${SESSION_NAME}`, { encoding: 'utf-8' });
+        // /help output is done when the prompt reappears after the help text
+        if (pane.includes('help') && (pane.includes('\u276f') || /^>\s/m.test(pane))) {
+          break;
+        }
+      } catch {}
+      await new Promise((r) => setTimeout(r, 1000));
     }
   },
 

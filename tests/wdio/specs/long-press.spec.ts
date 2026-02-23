@@ -1,6 +1,7 @@
 import { browser, expect } from '@wdio/globals';
-import { navigateToSession, longPressOnTerminal } from '../helpers/terminal.js';
+import { navigateToSession, longPressOnTerminal, isTextVisibleInPage } from '../helpers/terminal.js';
 
+// function (not arrow) required for Mocha's this.retries()
 describe('Long Press', function () {
   // Long press + mouse tracking is fragile in simulator
   this.retries(2);
@@ -12,13 +13,6 @@ describe('Long Press', function () {
     await browser.pause(500);
 
     // Selection mode bar should appear with "Selection mode" text
-    const visible = await browser.execute(() => {
-      const el = document.evaluate(
-        "//*[contains(text(),'Selection mode')]",
-        document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null,
-      ).singleNodeValue;
-      return el ? (el as HTMLElement).offsetParent !== null : false;
-    });
-    expect(visible).toBe(true);
+    expect(await isTextVisibleInPage('Selection mode')).toBe(true);
   });
 });

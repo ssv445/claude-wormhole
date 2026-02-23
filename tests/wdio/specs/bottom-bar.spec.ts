@@ -1,5 +1,8 @@
 import { browser, $, expect } from '@wdio/globals';
-import { navigateToSession, tapButton, getTmuxPaneContent, waitForTmuxChange } from '../helpers/terminal.js';
+import {
+  navigateToSession, tapButton, getTmuxPaneContent,
+  isTmuxInCopyMode, isTextVisibleInPage,
+} from '../helpers/terminal.js';
 
 describe('Bottom Bar', () => {
   beforeEach(async () => {
@@ -28,65 +31,42 @@ describe('Bottom Bar', () => {
   it('should send escape when Esc tapped', async () => {
     await tapButton('Escape');
     await browser.pause(500);
-    // Terminal should still be responsive (not crashed) — verify tmux pane readable
-    const pane = getTmuxPaneContent();
-    expect(typeof pane).toBe('string');
+    // Esc should not put terminal into copy mode (it cancels things)
+    expect(isTmuxInCopyMode()).toBe(false);
+    // Pane should still have content (session alive)
+    expect(getTmuxPaneContent().trim().length).toBeGreaterThan(0);
   });
 
   it('should send enter when Enter tapped', async () => {
     const before = getTmuxPaneContent();
     await tapButton('Enter');
     await browser.pause(1500);
-    // Sending Enter to Claude Code at the prompt may produce new prompt line
-    // or may not visibly change — just verify the terminal is still alive
+    // Enter on Claude Code prompt advances the prompt or shows an error —
+    // either way the pane should still contain the prompt character
     const after = getTmuxPaneContent();
-    expect(typeof after).toBe('string');
-    expect(after.length).toBeGreaterThan(0);
+    const hasPrompt = after.includes('\u276f') || /^>\s/m.test(after);
+    expect(hasPrompt).toBe(true);
   });
 
   it('should send up arrow when Up tapped', async () => {
+    const before = getTmuxPaneContent();
     await tapButton('Up arrow');
     await browser.pause(500);
-    const pane = getTmuxPaneContent();
-    expect(typeof pane).toBe('string');
+    // Up arrow may recall /help from history (run in onPrepare)
+    const after = getTmuxPaneContent();
+    // Pane should still be alive and contain the prompt
+    expect(after.trim().length).toBeGreaterThan(0);
   });
 
   it('should toggle virtual keyboard visibility', async () => {
-    // Keyboard should be hidden initially
-    const kbLabel = await browser.execute(() => {
-      const el = document.evaluate(
-        "//*[contains(text(),'Virtual Keyboard')]",
-        document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null,
-      ).singleNodeValue;
-      return el ? (el as HTMLElement).offsetParent !== null : false;
-    });
-    expect(kbLabel).toBe(false);
+    expect(await isTextVisibleInPage('Virtual Keyboard')).toBe(false);
 
-    // Tap show keyboard
     await tapButton('Show keyboard');
     await browser.pause(300);
+    expect(await isTextVisibleInPage('Virtual Keyboard')).toBe(true);
 
-    // "Virtual Keyboard" label should now be visible
-    const visible = await browser.execute(() => {
-      const el = document.evaluate(
-        "//*[contains(text(),'Virtual Keyboard')]",
-        document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null,
-      ).singleNodeValue;
-      return el ? (el as HTMLElement).offsetParent !== null : false;
-    });
-    expect(visible).toBe(true);
-
-    // Tap hide keyboard
     await tapButton('Hide keyboard');
     await browser.pause(300);
-
-    const hidden = await browser.execute(() => {
-      const el = document.evaluate(
-        "//*[contains(text(),'Virtual Keyboard')]",
-        document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null,
-      ).singleNodeValue;
-      return el ? (el as HTMLElement).offsetParent !== null : false;
-    });
-    expect(hidden).toBe(false);
+    expect(await isTextVisibleInPage('Virtual Keyboard')).toBe(false);
   });
 });

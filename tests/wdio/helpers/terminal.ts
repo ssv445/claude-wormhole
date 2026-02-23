@@ -13,8 +13,11 @@ export async function navigateToSession(): Promise<void> {
   await browser.url(`/?session=${SESSION_NAME}`);
   const screen = await $('.xterm-screen');
   await screen.waitForExist({ timeout: 15000 });
-  // Let WebSocket deliver initial data
-  await browser.pause(2000);
+  // Wait until WebSocket delivers data (tmux pane has content)
+  await browser.waitUntil(
+    () => getTmuxPaneContent().trim().length > 0,
+    { timeout: 10000, timeoutMsg: 'WebSocket never delivered terminal data' },
+  );
 }
 
 /** Navigate to the home page, wait for React hydration and session list to load */
@@ -33,8 +36,8 @@ export async function navigateToHome(): Promise<void> {
 }
 
 /**
- * Tap a bottom-bar button by its title attribute.
- * Uses W3C touch pointer actions because buttons use onPointerDown.
+ * Tap a button by its title attribute.
+ * Uses W3C touch pointer actions because bottom-bar buttons use onPointerDown.
  */
 export async function tapButton(title: string): Promise<void> {
   const btn = await $(`button[title="${title}"]`);
@@ -63,15 +66,16 @@ export async function tapButton(title: string): Promise<void> {
 
 /**
  * Swipe vertically on .xterm-screen center.
- * Positive deltaY = swipe down (scroll up), negative = swipe up (scroll down).
+ * Positive swipeDistancePx = finger moves down the screen (scrolls up in tmux).
+ * Negative = finger moves up (scrolls down in tmux).
  */
-export async function swipeOnTerminal(deltaY: number, durationMs = 300): Promise<void> {
+export async function swipeOnTerminal(swipeDistancePx: number, durationMs = 300): Promise<void> {
   const screen = await $('.xterm-screen');
   const location = await screen.getLocation();
   const size = await screen.getSize();
   const x = Math.round(location.x + size.width / 2);
   const startY = Math.round(location.y + size.height / 2);
-  const endY = startY + deltaY;
+  const endY = startY + swipeDistancePx;
 
   await browser.performActions([
     {
@@ -177,5 +181,44 @@ export function isTmuxInCopyMode(): boolean {
 export function exitTmuxCopyMode(): void {
   try {
     execSync(`tmux send-keys -t ${SESSION_NAME} q`);
-  } catch {}
+  } catch (e) {
+    console.error('exitTmuxCopyMode failed:', e);
+  }
+}
+
+/**
+ * Check if a text string is visible in the page DOM.
+ * Uses XPath contains() + offsetParent to confirm visibility.
+ */
+export async function isTextVisibleInPage(text: string): Promise<boolean> {
+  return browser.execute((t: string) => {
+    const el = document.evaluate(
+      `//*[contains(text(),'${t}')]`,
+      document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null,
+    ).singleNodeValue;
+    return el ? (el as HTMLElement).offsetParent !== null : false;
+  }, text);
+}
+
+/**
+ * Click a button found by its visible text content inside browser.execute().
+ * Throws if the button is not found — prevents silent false-green tests.
+ */
+export async function clickButtonByText(text: string): Promise<void> {
+  const found = await browser.execute((t: string) => {
+    const buttons = Array.from(document.querySelectorAll('button'));
+    const btn = buttons.find((b) => b.textContent?.trim() === t);
+    if (!btn) return false;
+    btn.click();
+    return true;
+  }, text);
+  if (!found) throw new Error(`Button with text "${text}" not found`);
+}
+
+/**
+ * Send keys to the tmux session directly (server-side).
+ * Useful for generating scrollback or interacting without the browser.
+ */
+export function sendTmuxKeys(keys: string): void {
+  execSync(`tmux send-keys -t ${SESSION_NAME} ${keys}`);
 }
