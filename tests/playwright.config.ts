@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const port = parseInt(process.env.PORT || '3100', 10);
+
 export default defineConfig({
   testDir: './mobile',
   timeout: 30_000,
@@ -10,7 +12,7 @@ export default defineConfig({
   reporter: 'list',
 
   use: {
-    baseURL: 'http://localhost:3101',
+    baseURL: `http://localhost:${port}`,
     trace: 'on-first-retry',
   },
 
@@ -35,7 +37,7 @@ export default defineConfig({
   // Dev server started by the test runner
   webServer: {
     command: 'npm run dev',
-    port: 3101,
+    port,
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,
   },
