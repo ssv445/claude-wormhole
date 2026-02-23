@@ -164,6 +164,10 @@ export function TerminalView({
   const composeTextRef = useRef('');
   const speechRef = useRef<SpeechRecognitionInstance | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // When compose opens for paste (not voice), don't append Enter on send.
+  // State drives the placeholder; ref is read in closeCompose to avoid stale closures.
+  const [composeMode, setComposeMode] = useState<'voice' | 'paste'>('voice');
+  const composeModeRef = useRef<'voice' | 'paste'>('voice');
 
   // Selection mode state (mobile long-press to select text)
   const [selectionMode, setSelectionMode] = useState(false);
@@ -175,6 +179,18 @@ export function TerminalView({
     wsRef.current?.send(key);
   }, []);
 
+  // Text paste: reads clipboard text via API (works on desktop/Android).
+  // On iOS Safari where readText() always throws NotAllowedError, opens
+  // the compose overlay so the user can paste into a <textarea> (iOS
+  // allows native paste into input fields), then send via WebSocket.
+  const openComposeForPaste = useCallback(() => {
+    composeModeRef.current = 'paste';
+    setComposeMode('paste');
+    setShowCompose(true);
+    setComposeText('');
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, []);
+
   const handlePaste = useCallback(async () => {
     try {
       const text = await navigator.clipboard.readText();
@@ -182,13 +198,68 @@ export function TerminalView({
         wsRef.current.send(text);
         return;
       }
-      // readText() succeeded but empty — clipboard likely has image
+      // readText() succeeded but returned empty — clipboard may have image.
+      // On desktop, send Ctrl+V so Claude Code can handle image paste natively.
+      // Then open compose overlay as fallback for iOS where Ctrl+V won't work.
       wsRef.current?.send('\x16');
+      openComposeForPaste();
+      return;
     } catch {
-      // Clipboard API denied (common on mobile Safari) — can't tell if
-      // clipboard has text or image. Send Ctrl+V so image paste works;
-      // for text, user can long-press → Paste in the terminal instead.
-      wsRef.current?.send('\x16');
+      // Clipboard API denied (always on iOS Safari) — open compose overlay
+      // so user can paste into a textarea where iOS allows it
+      openComposeForPaste();
+    }
+  }, [openComposeForPaste]);
+
+  // File attach: opens native file picker directly.
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [attachStatus, setAttachStatus] = useState<'idle' | 'uploading'>('idle');
+
+  const sendFileBase64 = useCallback((name: string, base64: string) => {
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+    setAttachStatus('uploading');
+    wsRef.current.send(JSON.stringify({ type: 'file_attach', name, data: base64 }));
+  }, []);
+
+  const handleFileSelected = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // 10MB limit
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File too large (max 10MB)');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      // result is "data:<mime>;base64,<data>" — extract the base64 part
+      const base64 = (reader.result as string).split(',')[1];
+      sendFileBase64(file.name, base64);
+    };
+    reader.onerror = () => {
+      setAttachStatus('idle');
+    };
+    reader.readAsDataURL(file);
+    // Reset so selecting the same file again still triggers onChange
+    e.target.value = '';
+    // Refocus terminal after file selection
+    xtermRef.current?.focus();
+  }, [sendFileBase64]);
+
+  // Open the native file picker directly. clipboard.read() is async and
+  // burns the user activation on iOS — by the time it rejects, input.click()
+  // is silently ignored. The iOS file picker already offers Photos, Camera,
+  // and Files so users can pick screenshots/photos from there.
+  const handleFileAttach = useCallback(() => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+      // Refocus terminal when picker closes (covers cancel — no change event fires).
+      // iOS fires focus on the window when the picker dismisses.
+      const refocus = () => {
+        window.removeEventListener('focus', refocus);
+        // Short delay — iOS needs a moment after picker dismissal
+        setTimeout(() => xtermRef.current?.focus(), 300);
+      };
+      window.addEventListener('focus', refocus);
     }
   }, []);
 
@@ -273,6 +344,8 @@ export function TerminalView({
   }, []);
 
   const openCompose = useCallback(() => {
+    composeModeRef.current = 'voice';
+    setComposeMode('voice');
     setShowCompose(true);
     setComposeText('');
     startListening();
@@ -285,7 +358,9 @@ export function TerminalView({
     // Read from ref to avoid stale closure — composeText state may lag behind
     const text = composeTextRef.current;
     if (send && text.trim() && wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(text + '\r');
+      // Voice mode appends Enter to submit; paste mode sends raw text
+      // so user can paste into a prompt without auto-submitting
+      wsRef.current.send(composeModeRef.current === 'voice' ? text + '\r' : text);
     }
     setShowCompose(false);
     setComposeText('');
@@ -404,6 +479,16 @@ export function TerminalView({
         if (typeof raw === 'string' && raw.startsWith('{')) {
           try {
             const msg = JSON.parse(raw);
+            if (msg.type === 'file_saved') {
+              setAttachStatus('idle');
+              // Path is typed into the PTY server-side — no client round-trip needed
+              return;
+            }
+            if (msg.type === 'file_error') {
+              setAttachStatus('idle');
+              term.write(`\r\n\x1b[31mAttach error: ${msg.message}\x1b[0m\r\n`);
+              return;
+            }
             if (msg.type === 'version') {
               serverVersionRef.current = msg.v;
               const clientVersion = process.env.NEXT_PUBLIC_BUILD_VERSION || 'unknown';
@@ -421,6 +506,7 @@ export function TerminalView({
       };
 
       ws.onclose = () => {
+        setAttachStatus('idle');
         if (intentionalCloseRef.current || disposed) return;
         scheduleReconnect(term);
       };
@@ -855,7 +941,7 @@ export function TerminalView({
             ref={textareaRef}
             value={composeText}
             onChange={(e) => setComposeText(e.target.value)}
-            placeholder="Speak or type..."
+            placeholder={composeMode === 'paste' ? 'Paste here, then tap Send' : 'Speak or type...'}
             rows={3}
             className="w-full bg-transparent text-gray-100 text-sm font-mono p-3 resize-none focus:outline-none placeholder-gray-500"
             style={{ maxHeight: '8rem' }}
@@ -894,7 +980,7 @@ export function TerminalView({
         </div>
       )}
 
-      {/* Bottom bar - Mobile only: Paste | ↑ | Keyboard | ↓ | Enter */}
+      {/* Bottom bar - Mobile only: Esc | Paste | Attach | Mic | I | ↑ | ⌨ | ↓ | Enter */}
       <div className="shrink-0 md:hidden h-11 bg-gray-900/90 backdrop-blur-sm border-t border-gray-700/50 flex items-center justify-around">
         {/* Escape */}
         <button
@@ -904,15 +990,43 @@ export function TerminalView({
         >
           <span className="text-xs font-mono font-bold">Esc</span>
         </button>
-        {/* Paste — tries clipboard text first, falls back to Ctrl+V for image paste */}
+        {/* Text paste — tries Clipboard API, falls back to compose overlay on iOS
+            where readText() always throws NotAllowedError. Uses onPointerDown
+            WITHOUT preventDefault() to preserve user activation for clipboard API. */}
         <button
-          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); handlePaste(); }}
+          onPointerDown={(e) => { e.stopPropagation(); handlePaste(); }}
           className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
-          title="Paste (Ctrl+V)"
+          title="Paste text"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
             <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
           </svg>
+        </button>
+        {/* File attach — opens file picker directly (no async clipboard.read()
+            which burns iOS user activation before input.click() can fire) */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,.txt,.md,.json,.csv,.pdf,.py,.js,.ts,.tsx"
+          className="hidden"
+          onChange={handleFileSelected}
+        />
+        <button
+          onClick={handleFileAttach}
+          className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
+          title="Attach file"
+          disabled={attachStatus === 'uploading'}
+        >
+          {attachStatus === 'uploading' ? (
+            <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth={4} />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+            </svg>
+          )}
         </button>
         {/* Mic — opens compose overlay with voice input */}
         <button

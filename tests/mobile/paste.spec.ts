@@ -8,7 +8,7 @@ import {
   pointerDown,
 } from '../helpers/terminal';
 
-test.describe('Paste — Mobile', () => {
+test.describe('Text Paste — Mobile', () => {
   test.beforeEach(async ({ page }) => {
     await stubBrowserAPIs(page);
   });
@@ -24,7 +24,7 @@ test.describe('Paste — Mobile', () => {
     await openTerminalSession(page);
 
     clearMessages(sent);
-    await pointerDown(page, 'button[title="Paste (Ctrl+V)"]');
+    await pointerDown(page, 'button[title="Paste text"]');
     await waitForMessages(page, 500);
 
     expect(sent).toContain('hello mobile');
@@ -32,48 +32,43 @@ test.describe('Paste — Mobile', () => {
     expect(sent).not.toContain('\x16');
   });
 
-  test('clipboard empty → sends Ctrl+V for image paste', async ({ page }, testInfo) => {
+  test('clipboard empty → opens compose overlay for manual paste', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile-webkit', 'Mobile only');
 
     await page.addInitScript(() => {
       navigator.clipboard.readText = async () => '';
     });
 
-    const sent = await setupTerminalMocks(page);
+    await setupTerminalMocks(page);
     await openTerminalSession(page);
 
-    clearMessages(sent);
-    await pointerDown(page, 'button[title="Paste (Ctrl+V)"]');
-    await waitForMessages(page, 500);
-
-    expect(sent).toContain('\x16');
+    await pointerDown(page, 'button[title="Paste text"]');
+    // Compose overlay should appear with paste-specific placeholder
+    const textarea = page.locator('textarea[placeholder="Paste here, then tap Send"]');
+    await expect(textarea).toBeVisible({ timeout: 2000 });
   });
 
-  test('clipboard has image (readText throws DataError) → sends Ctrl+V for image paste', async ({ page }, testInfo) => {
+  test('clipboard permission denied → opens compose overlay for manual paste', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile-webkit', 'Mobile only');
 
-    // readText() throws non-permission error when clipboard has image but no text
     await page.addInitScript(() => {
       navigator.clipboard.readText = async () => {
-        throw new DOMException('No text on clipboard', 'DataError');
+        throw new DOMException('Clipboard access denied', 'NotAllowedError');
       };
     });
 
-    const sent = await setupTerminalMocks(page);
+    await setupTerminalMocks(page);
     await openTerminalSession(page);
 
-    clearMessages(sent);
-    await pointerDown(page, 'button[title="Paste (Ctrl+V)"]');
-    await waitForMessages(page, 500);
-
-    expect(sent).toContain('\x16');
+    await pointerDown(page, 'button[title="Paste text"]');
+    // Compose overlay should appear with paste-specific placeholder
+    const textarea = page.locator('textarea[placeholder="Paste here, then tap Send"]');
+    await expect(textarea).toBeVisible({ timeout: 2000 });
   });
 
-  test('clipboard permission denied → sends Ctrl+V (image paste fallback)', async ({ page }, testInfo) => {
+  test('compose overlay Send in paste mode → sends raw text without Enter', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile-webkit', 'Mobile only');
 
-    // Mobile Safari denies clipboard access — can't tell if clipboard has
-    // text or image, so send Ctrl+V to keep image paste working
     await page.addInitScript(() => {
       navigator.clipboard.readText = async () => {
         throw new DOMException('Clipboard access denied', 'NotAllowedError');
@@ -83,13 +78,24 @@ test.describe('Paste — Mobile', () => {
     const sent = await setupTerminalMocks(page);
     await openTerminalSession(page);
 
+    // Open compose overlay via paste button
+    await pointerDown(page, 'button[title="Paste text"]');
+    const textarea = page.locator('textarea[placeholder="Paste here, then tap Send"]');
+    await expect(textarea).toBeVisible({ timeout: 2000 });
+
+    // Type text and tap Send
+    await textarea.fill('pasted content');
     clearMessages(sent);
-    await pointerDown(page, 'button[title="Paste (Ctrl+V)"]');
+    await page.click('button:has-text("Send")');
     await waitForMessages(page, 500);
 
-    expect(sent).toContain('\x16');
+    // Paste mode sends raw text — no trailing \r
+    expect(sent).toContain('pasted content');
+    expect(sent).not.toContain('pasted content\r');
   });
 });
+
+// Image paste tests removed — replaced by file attach (see attach.spec.ts)
 
 test.describe('Paste — Desktop', () => {
   test.beforeEach(async ({ page }) => {
@@ -104,8 +110,6 @@ test.describe('Paste — Desktop', () => {
 
     clearMessages(sent);
 
-    // Simulate browser paste event — xterm.js picks up the 'paste' event on
-    // its textarea, feeds the pasted text through onData → WebSocket
     await page.evaluate(() => {
       const textarea = document.querySelector('.xterm-helper-textarea') as HTMLTextAreaElement;
       if (!textarea) throw new Error('xterm textarea not found');
@@ -130,7 +134,6 @@ test.describe('Paste — Desktop', () => {
 
     clearMessages(sent);
 
-    // Paste event with image data but no text — xterm should not inject any text
     await page.evaluate(() => {
       const textarea = document.querySelector('.xterm-helper-textarea') as HTMLTextAreaElement;
       if (!textarea) throw new Error('xterm textarea not found');
@@ -139,24 +142,23 @@ test.describe('Paste — Desktop', () => {
         cancelable: true,
         clipboardData: new DataTransfer(),
       });
-      // Set image data but no text/plain
       pasteEvent.clipboardData!.setData('image/png', 'binary-data');
       textarea.dispatchEvent(pasteEvent);
     });
 
     await waitForMessages(page, 500);
-    // No text should be sent — image paste is handled by Claude Code natively
     expect(sent.filter(m => m !== '')).toHaveLength(0);
   });
 
-  test('paste button is hidden on desktop', async ({ page }, testInfo) => {
+  test('paste buttons are hidden on desktop', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop only');
 
     await setupTerminalMocks(page);
     await openTerminalSession(page);
 
-    // Mobile paste button should not be visible on desktop viewport
-    const pasteBtn = page.locator('button[title="Paste (Ctrl+V)"]');
-    await expect(pasteBtn).not.toBeVisible();
+    const textPasteBtn = page.locator('button[title="Paste text"]');
+    const attachBtn = page.locator('button[title="Attach file"]');
+    await expect(textPasteBtn).not.toBeVisible();
+    await expect(attachBtn).not.toBeVisible();
   });
 });

@@ -36,6 +36,20 @@ export async function setupTerminalMocks(
         throw new Error(`Unexpected binary WS frame: ${Buffer.from(msg).toString('hex')}`);
       }
       sent.push(msg);
+
+      // Mock file_attach handler — respond with file_saved
+      if (msg.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(msg);
+          if (parsed.type === 'file_attach' && parsed.name && parsed.data) {
+            ws.send(JSON.stringify({
+              type: 'file_saved',
+              path: `/tmp/wormhole-attach/mock/${parsed.name}`,
+              originalName: parsed.name,
+            }));
+          }
+        } catch { /* not JSON */ }
+      }
     });
 
     // Send a welcome banner so the terminal renders something.

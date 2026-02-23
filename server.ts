@@ -1,7 +1,9 @@
 import { createServer } from 'http';
-import { closeSync, existsSync } from 'fs';
+import { closeSync, existsSync, rmSync } from 'fs';
+import { writeFile, mkdir } from 'fs/promises';
 import { parse } from 'url';
-import { join } from 'path';
+import { join, extname } from 'path';
+import { randomBytes } from 'crypto';
 import { execFileSync } from 'child_process';
 import next from 'next';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -38,6 +40,32 @@ console.log(`Build version: ${BUILD_VERSION}`);
 const SESSION_NAME_RE = /^[a-zA-Z0-9_-]+$/;
 
 app.prepare().then(() => {
+  // Clean up attached files older than 30 days — sessions may resume after restart,
+  // so recent files must survive. Check individual file age, remove empty dirs after.
+  try {
+    const attachRoot = '/tmp/wormhole-attach';
+    if (existsSync(attachRoot)) {
+      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      const { readdirSync, statSync, unlinkSync } = require('fs');
+      for (const sessionDir of readdirSync(attachRoot)) {
+        const dirPath = join(attachRoot, sessionDir);
+        try {
+          const stat = statSync(dirPath);
+          if (!stat.isDirectory()) continue;
+          const files = readdirSync(dirPath);
+          for (const file of files) {
+            const filePath = join(dirPath, file);
+            try {
+              if (statSync(filePath).mtimeMs < thirtyDaysAgo) unlinkSync(filePath);
+            } catch { /* ignore per-file errors */ }
+          }
+          // Remove session dir if empty
+          if (readdirSync(dirPath).length === 0) rmSync(dirPath, { force: true });
+        } catch { /* ignore per-dir errors */ }
+      }
+    }
+  } catch { /* ignore */ }
+
   const server = createServer((req, res) => {
     // Prevent iOS from HTTP-caching sw.js — stale SW causes PWA deadlock
     if (req.url === '/sw.js') {
@@ -153,6 +181,9 @@ app.prepare().then(() => {
         } catch { /* already closed */ }
         leakedMasterFd = null;
       }
+      // Don't delete temp files here — iOS backgrounding kills WS, but the
+      // file path is already in the PTY input. Claude Code needs it after reconnect.
+      // Cleanup happens at server startup instead.
       if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
         ws.close();
       }
@@ -174,6 +205,38 @@ app.prepare().then(() => {
           const parsed = JSON.parse(str);
           if (parsed.type === 'resize' && parsed.cols && parsed.rows) {
             ptyProcess.resize(parsed.cols, parsed.rows);
+            return;
+          }
+
+          if (parsed.type === 'file_attach') {
+            // Async handler — don't block the event loop for large files
+            (async () => {
+              try {
+                const { name, data } = parsed;
+                // Server-side size cap: ~10MB decoded (base64 is ~33% larger)
+                const MAX_BASE64_BYTES = 14 * 1024 * 1024;
+                if (!name || !data || typeof name !== 'string' || typeof data !== 'string' || data.length > MAX_BASE64_BYTES) {
+                  ws.send(JSON.stringify({ type: 'file_error', message: 'Missing, empty, or oversized payload (max 10MB)' }));
+                  return;
+                }
+                // Sanitize extension — extname handles dotfiles correctly (.bashrc → '')
+                const rawExt = extname(name).slice(1).replace(/[^a-zA-Z0-9]/g, '');
+                const ext = rawExt ? '.' + rawExt : '';
+                const safeName = randomBytes(8).toString('hex') + ext;
+                const dir = join('/tmp', 'wormhole-attach', session);
+                await mkdir(dir, { recursive: true });
+                const filePath = join(dir, safeName);
+                await writeFile(filePath, Buffer.from(data, 'base64'));
+                // Type the path directly into the PTY — avoids client round-trip
+                // which can fail if the WS connection drops (iOS heartbeat timeout).
+                // Space separates from existing text, @ tells Claude Code to reference the file.
+                ptyProcess.write(` @${filePath} `);
+                ws.send(JSON.stringify({ type: 'file_saved', path: filePath, originalName: name }));
+              } catch (err) {
+                const message = err instanceof Error ? err.message : 'File save failed';
+                ws.send(JSON.stringify({ type: 'file_error', message }));
+              }
+            })();
             return;
           }
 

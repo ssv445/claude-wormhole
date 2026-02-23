@@ -17,7 +17,7 @@ test.describe('Bottom bar', () => {
     await setupTerminalMocks(page);
     await openTerminalSession(page);
 
-    const bottomBar = page.locator('div.md\\:hidden.h-11');
+    const bottomBar = page.locator('button[title="Escape"]').locator('..');
 
     if (testInfo.project.name === 'mobile-webkit') {
       await expect(bottomBar).toBeVisible();
@@ -79,7 +79,7 @@ test.describe('Bottom bar', () => {
     expect(sent).toContain('\x1b[B');
   });
 
-  test('Exit copy-mode (q) sends q', async ({ page }, testInfo) => {
+  test('Exit copy-mode button sends q', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile-webkit', 'Mobile only');
     const sent = await setupTerminalMocks(page);
     await openTerminalSession(page);
