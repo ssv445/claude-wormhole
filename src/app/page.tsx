@@ -241,6 +241,7 @@ export default function Home() {
           {/* Drawer panel */}
           <div
             className="absolute inset-y-0 left-0 w-64 bg-surface border-r border-border flex flex-col"
+            style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
             onClick={(e) => e.stopPropagation()}
           >
             {sidebar}
@@ -251,7 +252,7 @@ export default function Home() {
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Mobile top bar — hamburger + active tab name only */}
-        <div className="flex items-center bg-surface border-b border-border shrink-0 md:hidden">
+        <div className="flex items-center bg-surface border-b border-border shrink-0 md:hidden" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
           <button
             onClick={() => setSidebarOpen(true)}
             className="px-2.5 py-2 text-secondary hover:text-primary text-lg shrink-0 transition-colors"
