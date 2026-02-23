@@ -42,6 +42,23 @@ claude-wormhole/
 - `bin/env.sh` - Shared environment sourced by wormhole: sets WORMHOLE_ROOT, WORMHOLE_URL, PATH, log helpers
 - `scripts/tmux.conf` - Includes tmux-resurrect and tmux-continuum for session persistence across reboots
 
+## Worktree Development
+
+Each feature branch runs in its own git worktree with a unique port via `.env.local` (gitignored). This avoids port conflicts when running multiple dev servers.
+
+- Main worktree: port 3100
+- Feature worktrees: 3101, 3102, etc.
+- Each worktree needs its own `tailscale serve` binding
+
+```sh
+# Create a worktree for a feature branch
+git worktree add .worktrees/<branch-name> -b <branch-name>
+cd .worktrees/<branch-name>
+echo "PORT=<next-free-port>" > .env.local
+npm install
+tailscale serve --bg --https=$PORT http://127.0.0.1:$PORT
+```
+
 ## Dev Commands
 
 ```sh
@@ -53,9 +70,9 @@ wormhole restart               # Kill + clean build + start
 wormhole stop                  # Stop server
 wormhole status                # Check system health
 
-# Tailscale
-tailscale serve --bg 3100      # Expose over Tailscale HTTPS
-tailscale serve --bg off       # Stop serving
+# Tailscale — bind to the same port as PORT in .env.local
+tailscale serve --bg --https=$PORT http://127.0.0.1:$PORT
+tailscale serve --https=$PORT off  # Stop serving
 
 # Claude sessions
 cld                            # Launch Claude in tmux (alias for wormhole cld)
