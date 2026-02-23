@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import {
   setupTerminalMocks,
   openTerminalSession,
@@ -6,9 +8,14 @@ import {
   stubBrowserAPIs,
 } from '../helpers/terminal';
 
-// Client version is baked in at build time from build-version.json.
-// We created build-version.json with {"v":"test-build-abc123"} for tests.
-const CLIENT_VERSION = 'test-build-abc123';
+// Read the actual build version from build-version.json (same source next.config.ts uses)
+const CLIENT_VERSION = (() => {
+  try {
+    return JSON.parse(readFileSync(resolve(__dirname, '../../build-version.json'), 'utf8')).v;
+  } catch {
+    return 'unknown';
+  }
+})();
 
 test.describe('Build Version Check', () => {
   test.beforeEach(async ({ page }) => {
