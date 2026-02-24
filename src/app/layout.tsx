@@ -25,6 +25,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  // viewport-fit=cover unlocks env(safe-area-inset-*) for notch/home indicator
+  viewportFit: 'cover',
   themeColor: '#09090b',
 };
 

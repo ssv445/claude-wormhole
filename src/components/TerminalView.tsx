@@ -179,6 +179,21 @@ export function TerminalView({
     wsRef.current?.send(key);
   }, []);
 
+  // Short-tap guard: only fire action if press duration < 300ms.
+  // Prevents long-press (used for selection mode on terminal) from
+  // accidentally triggering bottom bar buttons.
+  const pointerDownTimeRef = useRef(0);
+  const TAP_MAX_MS = 300;
+  const onTapDown = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    pointerDownTimeRef.current = Date.now();
+  }, []);
+  // Returns true if the pointer up is a short tap
+  const isTap = useCallback(() => {
+    return (Date.now() - pointerDownTimeRef.current) < TAP_MAX_MS;
+  }, []);
+
   // Text paste: reads clipboard text via API (works on desktop/Android).
   // On iOS Safari where readText() always throws NotAllowedError, opens
   // the compose overlay so the user can paste into a <textarea> (iOS
@@ -549,12 +564,11 @@ export function TerminalView({
       // isn't ready, measurements use a fallback font and glyphs misalign.
       await document.fonts.load('14px "JetBrains Mono NF"');
 
-      // 10px on mobile gets ~62 cols on 390px screen (vs ~56 at 11px)
-      // Claude Code status bar needs ~75 chars but 62 is the practical max
+      // 11px on mobile gets ~56 cols on 390px screen — good readability tradeoff
       const isMobile = window.innerWidth < 768;
       const term = new Terminal({
         cursorBlink: true,
-        fontSize: isMobile ? 10 : 14,
+        fontSize: isMobile ? 11 : 14,
         fontFamily: '"JetBrains Mono NF", "JetBrains Mono", monospace',
         theme: XTERM_THEMES[theme],
         allowProposedApi: true,
@@ -893,7 +907,7 @@ export function TerminalView({
 
       {/* Virtual keyboard - Mobile only */}
       {keyboardVisible && (
-        <div className="flex flex-col border-t border-border bg-surface shrink-0 md:hidden">
+        <div className="flex flex-col border-t border-border bg-surface shrink-0 md:hidden rounded-t-xl">
           {/* Keyboard header */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-border">
             <span className="text-xs text-muted font-mono">Virtual Keyboard</span>
@@ -931,12 +945,14 @@ export function TerminalView({
               </div>
             ))}
           </div>
+          {/* Safe area bleed */}
+          <div style={{ height: 'env(safe-area-inset-bottom)' }} />
         </div>
       )}
 
       {/* Compose overlay — slides up when mic is tapped */}
       {showCompose && (
-        <div className="shrink-0 md:hidden bg-gray-800 border-t border-gray-600">
+        <div className="shrink-0 md:hidden bg-gray-800 border-t border-gray-600 rounded-t-xl">
           <textarea
             ref={textareaRef}
             value={composeText}
@@ -977,25 +993,78 @@ export function TerminalView({
               </button>
             </div>
           </div>
+          {/* Safe area bleed */}
+          <div style={{ height: 'env(safe-area-inset-bottom)' }} />
         </div>
       )}
 
-      {/* Bottom bar - Mobile only: Esc | Paste | Attach | Mic | I | ↑ | ⌨ | ↓ | Enter */}
-      <div className="shrink-0 md:hidden h-11 bg-gray-900/90 backdrop-blur-sm border-t border-gray-700/50 flex items-center justify-around">
+      {/* Bottom bar - Mobile only: scrollable strip, ordered by frequency of use.
+          Esc + Enter always visible; scroll right for Paste, Attach, Mic, etc.
+          Two-zone layout: buttons row above + safe area bleed below (matches native iOS toolbar pattern). */}
+      <div className="shrink-0 md:hidden bg-gray-900 border-t border-gray-700/50 flex flex-col">
+      <div
+        className="flex items-center overflow-x-auto gap-1 px-2"
+        style={{ scrollbarWidth: 'none' } as React.CSSProperties}
+      >
+        {/* File input — hidden, triggered by attach button */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,.txt,.md,.json,.csv,.pdf,.py,.js,.ts,.tsx"
+          className="hidden"
+          onChange={handleFileSelected}
+        />
         {/* Escape */}
         <button
-          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); sendKey('\x1b'); }}
-          className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
+          onPointerDown={onTapDown}
+          onPointerUp={() => { if (isTap()) sendKey('\x1b'); }}
+          className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
           title="Escape"
         >
           <span className="text-xs font-mono font-bold">Esc</span>
         </button>
-        {/* Text paste — tries Clipboard API, falls back to compose overlay on iOS
-            where readText() always throws NotAllowedError. Uses onPointerDown
-            WITHOUT preventDefault() to preserve user activation for clipboard API. */}
+        {/* Enter */}
         <button
-          onPointerDown={(e) => { e.stopPropagation(); handlePaste(); }}
-          className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
+          onPointerDown={onTapDown}
+          onPointerUp={() => { if (isTap()) sendKey('\r'); }}
+          className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
+          title="Enter"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+            <polyline points="9 10 4 15 9 20" />
+            <path d="M20 4v7a4 4 0 01-4 4H4" />
+          </svg>
+        </button>
+        {/* Arrow Up */}
+        <button
+          onPointerDown={onTapDown}
+          onPointerUp={() => { if (isTap()) sendKey('\x1b[A'); }}
+          className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
+          title="Up arrow"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" />
+          </svg>
+        </button>
+        {/* Arrow Down */}
+        <button
+          onPointerDown={onTapDown}
+          onPointerUp={() => { if (isTap()) sendKey('\x1b[B'); }}
+          className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
+          title="Down arrow"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {/* Text paste — tries Clipboard API, falls back to compose overlay on iOS
+            where readText() always throws NotAllowedError. Uses onPointerUp
+            WITHOUT preventDefault() to preserve user activation for clipboard API.
+            Only fires on short tap (<300ms) to avoid conflict with long-press. */}
+        <button
+          onPointerDown={(e) => { e.stopPropagation(); pointerDownTimeRef.current = Date.now(); }}
+          onPointerUp={() => { if (isTap()) handlePaste(); }}
+          className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
           title="Paste text"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
@@ -1004,16 +1073,9 @@ export function TerminalView({
         </button>
         {/* File attach — opens file picker directly (no async clipboard.read()
             which burns iOS user activation before input.click() can fire) */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*,.txt,.md,.json,.csv,.pdf,.py,.js,.ts,.tsx"
-          className="hidden"
-          onChange={handleFileSelected}
-        />
         <button
           onClick={handleFileAttach}
-          className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
+          className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
           title="Attach file"
           disabled={attachStatus === 'uploading'}
         >
@@ -1030,8 +1092,9 @@ export function TerminalView({
         </button>
         {/* Mic — opens compose overlay with voice input */}
         <button
-          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); openCompose(); }}
-          className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
+          onPointerDown={onTapDown}
+          onPointerUp={() => { if (isTap()) openCompose(); }}
+          className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
           title="Voice input"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
@@ -1041,31 +1104,10 @@ export function TerminalView({
             <line x1="8" y1="23" x2="16" y2="23" />
           </svg>
         </button>
-        {/* Exit copy-mode — sends 'q' to tmux to return to input mode */}
-        <button
-          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); sendKey('q'); }}
-          className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
-          title="Exit copy mode (back to input)"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-            <path d="M12 4v16" />
-            <path d="M8 4h8M8 20h8" />
-          </svg>
-        </button>
-        {/* Arrow Up */}
-        <button
-          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); sendKey('\x1b[A'); }}
-          className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
-          title="Up arrow"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" />
-          </svg>
-        </button>
         {/* Keyboard toggle */}
         <button
           onClick={() => setKeyboardVisible(!keyboardVisible)}
-          className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
+          className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
           title={keyboardVisible ? 'Hide keyboard' : 'Show keyboard'}
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
@@ -1080,27 +1122,21 @@ export function TerminalView({
             )}
           </svg>
         </button>
-        {/* Arrow Down */}
+        {/* Exit copy-mode — sends 'q' to tmux to return to input mode */}
         <button
-          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); sendKey('\x1b[B'); }}
-          className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
-          title="Down arrow"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-        {/* Enter */}
-        <button
-          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); sendKey('\r'); }}
-          className="w-11 h-11 flex items-center justify-center text-gray-300 active:text-white"
-          title="Enter"
+          onPointerDown={onTapDown}
+          onPointerUp={() => { if (isTap()) sendKey('q'); }}
+          className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
+          title="Exit copy mode (back to input)"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-            <polyline points="9 10 4 15 9 20" />
-            <path d="M20 4v7a4 4 0 01-4 4H4" />
+            <path d="M12 4v16" />
+            <path d="M8 4h8M8 20h8" />
           </svg>
         </button>
+      </div>
+      {/* Safe area bleed — background color fills home indicator zone, no interactive content */}
+      <div className="bg-gray-900" style={{ height: 'env(safe-area-inset-bottom)' }} />
       </div>
     </div>
   );
