@@ -179,6 +179,21 @@ export function TerminalView({
     wsRef.current?.send(key);
   }, []);
 
+  // Short-tap guard: only fire action if press duration < 300ms.
+  // Prevents long-press (used for selection mode on terminal) from
+  // accidentally triggering bottom bar buttons.
+  const pointerDownTimeRef = useRef(0);
+  const TAP_MAX_MS = 300;
+  const onTapDown = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    pointerDownTimeRef.current = Date.now();
+  }, []);
+  // Returns true if the pointer up is a short tap
+  const isTap = useCallback(() => {
+    return (Date.now() - pointerDownTimeRef.current) < TAP_MAX_MS;
+  }, []);
+
   // Text paste: reads clipboard text via API (works on desktop/Android).
   // On iOS Safari where readText() always throws NotAllowedError, opens
   // the compose overlay so the user can paste into a <textarea> (iOS
@@ -1001,7 +1016,8 @@ export function TerminalView({
         />
         {/* Escape */}
         <button
-          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); sendKey('\x1b'); }}
+          onPointerDown={onTapDown}
+          onPointerUp={() => { if (isTap()) sendKey('\x1b'); }}
           className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
           title="Escape"
         >
@@ -1009,7 +1025,8 @@ export function TerminalView({
         </button>
         {/* Enter */}
         <button
-          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); sendKey('\r'); }}
+          onPointerDown={onTapDown}
+          onPointerUp={() => { if (isTap()) sendKey('\r'); }}
           className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
           title="Enter"
         >
@@ -1020,7 +1037,8 @@ export function TerminalView({
         </button>
         {/* Arrow Up */}
         <button
-          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); sendKey('\x1b[A'); }}
+          onPointerDown={onTapDown}
+          onPointerUp={() => { if (isTap()) sendKey('\x1b[A'); }}
           className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
           title="Up arrow"
         >
@@ -1030,7 +1048,8 @@ export function TerminalView({
         </button>
         {/* Arrow Down */}
         <button
-          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); sendKey('\x1b[B'); }}
+          onPointerDown={onTapDown}
+          onPointerUp={() => { if (isTap()) sendKey('\x1b[B'); }}
           className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
           title="Down arrow"
         >
@@ -1039,10 +1058,12 @@ export function TerminalView({
           </svg>
         </button>
         {/* Text paste — tries Clipboard API, falls back to compose overlay on iOS
-            where readText() always throws NotAllowedError. Uses onPointerDown
-            WITHOUT preventDefault() to preserve user activation for clipboard API. */}
+            where readText() always throws NotAllowedError. Uses onPointerUp
+            WITHOUT preventDefault() to preserve user activation for clipboard API.
+            Only fires on short tap (<300ms) to avoid conflict with long-press. */}
         <button
-          onPointerDown={(e) => { e.stopPropagation(); handlePaste(); }}
+          onPointerDown={(e) => { e.stopPropagation(); pointerDownTimeRef.current = Date.now(); }}
+          onPointerUp={() => { if (isTap()) handlePaste(); }}
           className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
           title="Paste text"
         >
@@ -1071,7 +1092,8 @@ export function TerminalView({
         </button>
         {/* Mic — opens compose overlay with voice input */}
         <button
-          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); openCompose(); }}
+          onPointerDown={onTapDown}
+          onPointerUp={() => { if (isTap()) openCompose(); }}
           className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
           title="Voice input"
         >
@@ -1102,7 +1124,8 @@ export function TerminalView({
         </button>
         {/* Exit copy-mode — sends 'q' to tmux to return to input mode */}
         <button
-          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); sendKey('q'); }}
+          onPointerDown={onTapDown}
+          onPointerUp={() => { if (isTap()) sendKey('q'); }}
           className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
           title="Exit copy mode (back to input)"
         >

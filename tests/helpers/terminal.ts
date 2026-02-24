@@ -87,12 +87,15 @@ export async function openTerminalSession(
 }
 
 /**
- * Trigger a pointerdown event on a button (for React onPointerDown handlers).
- * Playwright's dispatchEvent creates a basic Event — we need a real PointerEvent.
+ * Simulate a short tap (pointerdown + pointerup) on a button.
+ * Bottom bar buttons use a tap-duration guard: action fires on pointerUp
+ * only if the press was <300ms. We fire both events with no delay to
+ * simulate an instant tap.
  */
 export async function pointerDown(page: Page, selector: string): Promise<void> {
   await page.locator(selector).evaluate((el) => {
     el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
   });
 }
 

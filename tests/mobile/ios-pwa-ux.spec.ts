@@ -152,9 +152,10 @@ test.describe('iOS PWA UX', () => {
       await setupTerminalMocks(page);
       await openTerminalSession(page);
 
-      // Open compose overlay via mic button
+      // Open compose overlay via mic button (short tap: pointerdown + pointerup)
       await page.locator('button[title="Voice input"]').evaluate((el) => {
         el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+        el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
       });
       await page.waitForTimeout(200);
 
