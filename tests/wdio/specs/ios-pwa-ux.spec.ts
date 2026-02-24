@@ -19,12 +19,17 @@ describe('iOS PWA UX — Safe Area & Layout', () => {
     expect(content).toContain('viewport-fit=cover');
   });
 
-  it('bottom bar has safe-area-inset-bottom in style', async () => {
-    const style = await browser.execute(() => {
+  it('bottom bar has safe-area-inset-bottom bleed zone', async () => {
+    const hasBleed = await browser.execute(() => {
       const esc = document.querySelector('button[title="Escape"]');
-      return esc?.parentElement?.getAttribute('style') ?? '';
+      // Two-zone layout: buttons row is inside an outer flex-col container
+      // The bleed div is a sibling with safe-area-inset-bottom in style
+      const outer = esc?.closest('.flex-col');
+      if (!outer) return false;
+      const bleed = outer.querySelector('div[style*="safe-area-inset-bottom"]');
+      return !!bleed;
     });
-    expect(style).toContain('safe-area-inset-bottom');
+    expect(hasBleed).toBe(true);
   });
 
   it('top bar has safe-area-inset-top in style', async () => {
@@ -84,7 +89,7 @@ describe('iOS PWA UX — Scrollable Bottom Bar', () => {
       const esc = document.querySelector('button[title="Escape"]');
       return esc?.getAttribute('class') ?? '';
     });
-    expect(cls).toContain('active:scale-90');
+    expect(cls).toContain('active:scale-95');
     expect(cls).toContain('transition-transform');
   });
 });

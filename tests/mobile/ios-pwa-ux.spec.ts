@@ -44,18 +44,19 @@ test.describe('iOS PWA UX', () => {
       expect(style).toContain('safe-area-inset-bottom');
     });
 
-    test('bottom bar has safe-area-inset-bottom padding', async ({ page }, testInfo) => {
+    test('bottom bar has safe-area-inset-bottom bleed zone', async ({ page }, testInfo) => {
       test.skip(testInfo.project.name !== 'mobile-webkit', 'Mobile only');
       await setupTerminalMocks(page);
       await openTerminalSession(page);
 
-      // Bottom bar is the parent of the Escape button
-      const bottomBar = page.locator('button[title="Escape"]').locator('..');
-      const style = await bottomBar.getAttribute('style');
-      expect(style).toContain('safe-area-inset-bottom');
+      // Two-zone layout: buttons row + safe area bleed div below.
+      // The outer container (grandparent of Escape button) contains both.
+      const outerBar = page.locator('button[title="Escape"]').locator('xpath=ancestor::div[contains(@class,"flex-col")]');
+      const bleedDiv = outerBar.locator('div[style*="safe-area-inset-bottom"]');
+      await expect(bleedDiv).toBeAttached();
     });
 
-    test('virtual keyboard panel has safe-area-inset-bottom', async ({ page }, testInfo) => {
+    test('virtual keyboard panel has safe-area-inset-bottom bleed zone', async ({ page }, testInfo) => {
       test.skip(testInfo.project.name !== 'mobile-webkit', 'Mobile only');
       await setupTerminalMocks(page);
       await openTerminalSession(page);
@@ -65,8 +66,9 @@ test.describe('iOS PWA UX', () => {
       const kbPanel = page.locator('text=Virtual Keyboard').locator('xpath=ancestor::div[contains(@class,"rounded-t-xl")]');
       await expect(kbPanel).toBeVisible();
 
-      const style = await kbPanel.getAttribute('style');
-      expect(style).toContain('safe-area-inset-bottom');
+      // Two-zone: content above + safe area bleed div below
+      const bleedDiv = kbPanel.locator('div[style*="safe-area-inset-bottom"]');
+      await expect(bleedDiv).toBeAttached();
     });
   });
 
@@ -126,7 +128,7 @@ test.describe('iOS PWA UX', () => {
 
       const escBtn = page.locator('button[title="Escape"]');
       const cls = await escBtn.getAttribute('class');
-      expect(cls).toContain('active:scale-90');
+      expect(cls).toContain('active:scale-95');
       expect(cls).toContain('transition-transform');
     });
   });
