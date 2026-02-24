@@ -1001,7 +1001,7 @@ export function TerminalView({
       {/* Bottom bar - Mobile only: scrollable strip, ordered by frequency of use.
           Esc + Enter always visible; scroll right for Paste, Attach, Mic, etc.
           Two-zone layout: buttons row above + safe area bleed below (matches native iOS toolbar pattern). */}
-      <div className="shrink-0 md:hidden bg-gray-900/90 backdrop-blur-sm border-t border-gray-700/50 flex flex-col">
+      <div className="shrink-0 md:hidden bg-gray-900 border-t border-gray-700/50 flex flex-col">
       <div
         className="flex items-center overflow-x-auto gap-1 px-2"
         style={{ scrollbarWidth: 'none' } as React.CSSProperties}
@@ -1136,7 +1136,7 @@ export function TerminalView({
         </button>
       </div>
       {/* Safe area bleed — background color fills home indicator zone, no interactive content */}
-      <div style={{ height: 'env(safe-area-inset-bottom)' }} />
+      <div className="bg-gray-900" style={{ height: 'env(safe-area-inset-bottom)' }} />
       </div>
     </div>
   );
