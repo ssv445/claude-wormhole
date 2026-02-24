@@ -982,8 +982,8 @@ export function TerminalView({
       {/* Bottom bar - Mobile only: scrollable strip, ordered by frequency of use.
           Esc + Enter always visible; scroll right for Paste, Attach, Mic, etc. */}
       <div
-        className="shrink-0 md:hidden bg-gray-900/90 backdrop-blur-sm border-t border-gray-700/50 flex items-center overflow-x-auto gap-0.5 px-1"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)', minHeight: '44px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
+        className="shrink-0 md:hidden bg-gray-900/90 backdrop-blur-sm border-t border-gray-700/50 flex items-center overflow-x-auto gap-1 px-2"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)', minHeight: '44px', scrollbarWidth: 'none' } as React.CSSProperties}
       >
         {/* File input — hidden, triggered by attach button */}
         <input
