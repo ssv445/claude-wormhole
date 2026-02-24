@@ -103,18 +103,14 @@ describe('iOS PWA UX — Rounded Corners', () => {
     await tapButton('Show keyboard');
     await browser.pause(500);
 
-    // Wait for "Virtual Keyboard" text to appear
+    // Wait for the keyboard panel with "Virtual Keyboard" header to appear
     await browser.waitUntil(
-      async () => browser.execute(() => !!document.querySelector('.rounded-t-xl')),
-      { timeout: 5000, timeoutMsg: 'No rounded-t-xl element appeared' },
+      async () => browser.execute(() => {
+        const all = document.querySelectorAll('.rounded-t-xl');
+        return Array.from(all).some(el => el.textContent?.includes('Virtual Keyboard'));
+      }),
+      { timeout: 5000, timeoutMsg: 'Virtual Keyboard panel with rounded-t-xl did not appear' },
     );
-
-    const hasRounded = await browser.execute(() => {
-      // The keyboard panel has rounded-t-xl and contains "Virtual Keyboard" header
-      const all = document.querySelectorAll('.rounded-t-xl');
-      return Array.from(all).some(el => el.textContent?.includes('Virtual Keyboard'));
-    });
-    expect(hasRounded).toBe(true);
   });
 
   it('compose overlay has rounded-t-xl', async () => {
