@@ -33,10 +33,12 @@
 }
 
 @layer base {
-  /* Lock viewport — full-screen PWA should never scroll */
+  /* Lock viewport — full-screen PWA should never scroll.
+     height: 100% ensures content fills behind safe areas with viewport-fit=cover. */
   html, body {
     overflow: hidden;
     overscroll-behavior: none;
+    height: 100%;
   }
 
   body {

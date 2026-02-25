@@ -945,8 +945,8 @@ export function TerminalView({
               </div>
             ))}
           </div>
-          {/* Safe area bleed */}
-          <div style={{ height: 'env(safe-area-inset-bottom)' }} />
+          {/* Safe area bleed — half-height, terminal bg so it blends in */}
+          <div style={{ height: 'calc(env(safe-area-inset-bottom) / 2)', backgroundColor: XTERM_THEMES[theme].background }} />
         </div>
       )}
 
@@ -993,16 +993,21 @@ export function TerminalView({
               </button>
             </div>
           </div>
-          {/* Safe area bleed */}
-          <div style={{ height: 'env(safe-area-inset-bottom)' }} />
+          {/* Safe area bleed — half-height, terminal bg so it blends in */}
+          <div style={{ height: 'calc(env(safe-area-inset-bottom) / 2)', backgroundColor: XTERM_THEMES[theme].background }} />
         </div>
       )}
 
       {/* Bottom bar - Mobile only: scrollable strip, ordered by frequency of use.
           Esc + Enter always visible; scroll right for Paste, Attach, Mic, etc.
-          Two-zone layout: buttons row above + safe area bleed below (matches native iOS toolbar pattern). */}
-      <div className="shrink-0 md:hidden bg-gray-900 border-t border-gray-700/50 flex flex-col">
+          Safe area padding keeps buttons above the home indicator; terminal bg makes bleed invisible. */}
       <div
+        className="shrink-0 md:hidden"
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) / 2)', backgroundColor: XTERM_THEMES[theme].background }}
+      >
+        {/* Visible bar — gray background with border */}
+        <div className="bg-gray-900 border-t border-gray-700/50">
+          <div
         className="flex items-center overflow-x-auto gap-1 px-2"
         style={{ scrollbarWidth: 'none' } as React.CSSProperties}
       >
@@ -1134,9 +1139,8 @@ export function TerminalView({
             <path d="M8 4h8M8 20h8" />
           </svg>
         </button>
-      </div>
-      {/* Safe area bleed — background color fills home indicator zone, no interactive content */}
-      <div className="bg-gray-900" style={{ height: 'env(safe-area-inset-bottom)' }} />
+          </div>
+        </div>
       </div>
     </div>
   );
