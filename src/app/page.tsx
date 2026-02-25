@@ -224,7 +224,7 @@ export default function Home() {
   );
 
   return (
-    <div className="h-dvh flex">
+    <div className="fixed inset-0 flex">
       {/* Desktop sidebar — always visible */}
       <div className="hidden md:flex md:flex-col md:w-56 md:shrink-0 bg-surface border-r border-border">
         {sidebar}
