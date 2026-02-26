@@ -687,6 +687,38 @@ cmd_release() {
   ok "Released v${new_version}"
 }
 
+# ── Dev mode ──
+
+cmd_dev() {
+  log "Starting dev server on port $WORMHOLE_PORT..."
+  cd "$WORMHOLE_ROOT"
+
+  # Kill anything already on our port
+  local pids
+  pids=$(lsof -iTCP:"$WORMHOLE_PORT" -sTCP:LISTEN -t 2>/dev/null || true)
+  if [ -n "$pids" ]; then
+    log "Killing existing process on :$WORMHOLE_PORT..."
+    echo "$pids" | xargs kill 2>/dev/null || true
+    sleep 1
+    # Force kill stragglers
+    pids=$(lsof -iTCP:"$WORMHOLE_PORT" -sTCP:LISTEN -t 2>/dev/null || true)
+    [ -n "$pids" ] && echo "$pids" | xargs kill -9 2>/dev/null || true
+  fi
+
+  # Ensure tailscale serve is active
+  if command -v tailscale &>/dev/null; then
+    tailscale serve --bg --https "$WORMHOLE_PORT" http://127.0.0.1:"$WORMHOLE_PORT" 2>/dev/null \
+      && ok "Tailscale HTTPS active on :$WORMHOLE_PORT" \
+      || warn "Tailscale serve failed (is Tailscale running?)"
+  else
+    warn "Tailscale not installed — dev server will only be available locally"
+  fi
+
+  ok "Starting Next.js dev server..."
+  echo ""
+  exec npm run dev
+}
+
 # ── Help ──
 
 cmd_help() {
@@ -719,6 +751,7 @@ cmd_help() {
   echo "  setup push [subject]       Generate VAPID keys for push notifications"
   echo ""
   echo "Dev:"
+  echo "  dev                        Start dev server with Tailscale HTTPS"
   echo "  release [patch|minor|major] [--dry-run]  Bump version + changelog + tag"
   echo ""
   echo "  help                       Show this help"
@@ -737,6 +770,7 @@ case "${1:-}" in
   notify)         cmd_notify ;;
   statusline)     cmd_statusline ;;
   setup)          shift; cmd_setup "$@" ;;
+  dev)            cmd_dev ;;
   release)        shift; cmd_release "$@" ;;
   help|--help|-h|"") cmd_help ;;
   *)
