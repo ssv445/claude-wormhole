@@ -1,10 +1,11 @@
 import { createServer } from 'http';
-import { closeSync, existsSync, rmSync } from 'fs';
+import { existsSync, rmSync } from 'fs';
 import { writeFile, mkdir } from 'fs/promises';
 import { parse } from 'url';
 import { join, extname } from 'path';
 import { randomBytes } from 'crypto';
-import { execFileSync } from 'child_process';
+import { execFile, execFileSync } from 'child_process';
+import { promisify } from 'util';
 import next from 'next';
 import { WebSocketServer, WebSocket } from 'ws';
 
@@ -37,6 +38,7 @@ const BUILD_VERSION = (() => {
 })();
 console.log(`Build version: ${BUILD_VERSION}`);
 
+const execFileAsync = promisify(execFile);
 const SESSION_NAME_RE = /^[a-zA-Z0-9_-]+$/;
 
 app.prepare().then(() => {
@@ -96,10 +98,10 @@ app.prepare().then(() => {
     }
   });
 
-  wss.on('connection', (ws: WebSocket, _req: unknown, session: string) => {
-    // Check if tmux session exists before spawning PTY
+  wss.on('connection', async (ws: WebSocket, _req: unknown, session: string) => {
+    // Check if tmux session exists before spawning PTY (async to avoid blocking event loop)
     try {
-      execFileSync(TMUX_PATH, ['has-session', '-t', session], { stdio: 'ignore' });
+      await execFileAsync(TMUX_PATH, ['has-session', '-t', session]);
     } catch (err) {
       console.warn(`Rejected connection to non-existent session: ${session}`);
       ws.send(`\x1b[31mError: tmux session "${session}" does not exist.\x1b[0m\r\n`);
@@ -122,9 +124,6 @@ app.prepare().then(() => {
     }
 
     let ptyProcess: ReturnType<typeof pty.spawn>;
-    // node-pty 1.1.0 leaks the first ptmx fd it opens (the one before _fd).
-    // Track it so we can close it manually during cleanup.
-    let leakedMasterFd: number | null = null;
     try {
       ptyProcess = pty.spawn(TMUX_PATH, ['-u', 'attach-session', '-t', session], {
         name: 'xterm-256color',
@@ -133,10 +132,6 @@ app.prepare().then(() => {
         cwd: process.env.HOME,
         env,
       });
-      // node-pty opens ptmx twice: fd N (leaked) and fd N+1 (tracked as _fd)
-      if (typeof ptyProcess._fd === 'number') {
-        leakedMasterFd = ptyProcess._fd - 1;
-      }
     } catch (err) {
       console.error('Failed to spawn PTY:', err);
       ws.close(1011, 'PTY spawn failed');
@@ -171,23 +166,13 @@ app.prepare().then(() => {
       cleaned = true;
       clearInterval(heartbeat);
       try { ptyProcess.kill(); } catch { /* already dead */ }
-      try { ptyProcess.destroy(); } catch { /* already dead */ }
-      // Close the leaked master ptmx fd that node-pty never cleans up
-      let closedLeakedFd = false;
-      if (leakedMasterFd !== null) {
-        try {
-          closeSync(leakedMasterFd);
-          closedLeakedFd = true;
-        } catch { /* already closed */ }
-        leakedMasterFd = null;
-      }
       // Don't delete temp files here — iOS backgrounding kills WS, but the
       // file path is already in the PTY input. Claude Code needs it after reconnect.
       // Cleanup happens at server startup instead.
       if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
         ws.close();
       }
-      console.log(`Cleaned up PTY for session: ${session}, closedLeakedFd: ${closedLeakedFd}`);
+      console.log(`Cleaned up PTY for session: ${session}`);
     };
 
     ptyProcess.onExit(({ exitCode }: { exitCode: number }) => {
