@@ -705,17 +705,33 @@ cmd_dev() {
     [ -n "$pids" ] && echo "$pids" | xargs kill -9 2>/dev/null || true
   fi
 
-  # Ensure tailscale serve is active
+  # Show access info
+  local lan_ip ts_hostname
+  lan_ip=$(ipconfig getifaddr en0 2>/dev/null || echo "")
+  ts_hostname=$(tailscale status --json 2>/dev/null | jq -r '.Self.DNSName' 2>/dev/null | sed 's/\.$//' || echo "")
+
+  ok "Starting Next.js dev server (0.0.0.0:$WORMHOLE_PORT)..."
+  echo ""
+  echo "  Local:      http://localhost:$WORMHOLE_PORT"
+  [ -n "$lan_ip" ] && echo "  LAN:        http://$lan_ip:$WORMHOLE_PORT"
+  [ -n "$ts_hostname" ] && echo "  Tailscale:  https://$ts_hostname:$WORMHOLE_PORT"
+  echo ""
+
+  # Start tailscale serve AFTER the node server is listening (background wait).
+  # Node binds 0.0.0.0 in dev, which conflicts with tailscale if set up first.
   if command -v tailscale &>/dev/null; then
-    tailscale serve --bg --https "$WORMHOLE_PORT" http://127.0.0.1:"$WORMHOLE_PORT" 2>/dev/null \
-      && ok "Tailscale HTTPS active on :$WORMHOLE_PORT" \
-      || warn "Tailscale serve failed (is Tailscale running?)"
-  else
-    warn "Tailscale not installed — dev server will only be available locally"
+    (
+      # Wait for the dev server to be listening
+      for i in $(seq 1 15); do
+        sleep 1
+        lsof -iTCP:"$WORMHOLE_PORT" -sTCP:LISTEN -t >/dev/null 2>&1 && break
+      done
+      tailscale serve --bg --https "$WORMHOLE_PORT" http://127.0.0.1:"$WORMHOLE_PORT" 2>/dev/null \
+        && echo -e "${GREEN}[wormhole]${NC} Tailscale HTTPS active on :$WORMHOLE_PORT" \
+        || echo -e "${YELLOW}[wormhole]${NC} Tailscale serve failed (is Tailscale running?)"
+    ) &
   fi
 
-  ok "Starting Next.js dev server..."
-  echo ""
   exec npm run dev
 }
 
