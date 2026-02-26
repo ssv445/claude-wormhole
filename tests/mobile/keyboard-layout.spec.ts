@@ -30,7 +30,7 @@ async function simulateKeyboard(page: import('@playwright/test').Page, height: n
     }
   }, height);
   // Let React state update propagate
-  await page.waitForTimeout(150);
+  await page.waitForTimeout(300);
 }
 
 test.describe('Keyboard layout fixes', () => {
@@ -121,18 +121,8 @@ test.describe('Keyboard layout fixes', () => {
       let style = await mainArea.getAttribute('style');
       expect(style).toContain('translateY(-300px)');
 
-      // Close keyboard — need to restore original visualViewport.height
-      await page.evaluate(() => {
-        const vv = window.visualViewport;
-        if (vv) {
-          Object.defineProperty(vv, 'height', {
-            get: () => window.innerHeight,
-            configurable: true,
-          });
-          vv.dispatchEvent(new Event('resize'));
-        }
-      });
-      await page.waitForTimeout(150);
+      // Close keyboard
+      await simulateKeyboard(page, 0);
 
       style = await mainArea.getAttribute('style');
       // Browser may render as translateY(0) or translateY(0px)

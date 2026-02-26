@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { SessionList } from '@/components/SessionList';
 import { TerminalView } from '@/components/TerminalView';
 import { NewSessionDialog } from '@/components/NewSessionDialog';
@@ -70,6 +70,13 @@ export default function Home() {
     vv.addEventListener('resize', onResize);
     return () => vv.removeEventListener('resize', onResize);
   }, []);
+
+  // Memoized style for main area — avoids object allocation on every render
+  const KEYBOARD_TRANSITION = 'transform 0.1s ease-out';
+  const mainAreaStyle = useMemo(() => ({
+    transform: nativeKeyboardHeight > 0 ? `translateY(-${nativeKeyboardHeight}px)` : 'translateY(0)',
+    transition: KEYBOARD_TRANSITION,
+  }), [nativeKeyboardHeight]);
 
   // Sync URL → session on mount
   useEffect(() => {
@@ -252,13 +259,7 @@ export default function Home() {
       {/* Main area — translateY shifts entire content up when native keyboard opens */}
       <div
         className="flex-1 flex flex-col min-w-0"
-        style={nativeKeyboardHeight > 0 ? {
-          transform: `translateY(-${nativeKeyboardHeight}px)`,
-          transition: 'transform 0.1s ease-out',
-        } : {
-          transform: 'translateY(0)',
-          transition: 'transform 0.1s ease-out',
-        }}
+        style={mainAreaStyle}
       >
         {/* Mobile top bar — hamburger + active tab name only */}
         <div className="flex items-center bg-surface border-b border-border shrink-0 md:hidden" style={{ paddingTop: 'env(safe-area-inset-top)' }}>

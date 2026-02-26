@@ -752,8 +752,15 @@ export function TerminalView({
           requestAnimationFrame(() => fitAddonRef.current?.fit());
         }
       }
+      // Track last known dimensions to avoid spurious resize on every window.focus (e.g. DevTools toggle)
+      let lastWidth = window.innerWidth;
+      let lastHeight = window.innerHeight;
       function handleFocus() {
-        requestAnimationFrame(() => fitAddonRef.current?.fit());
+        if (window.innerWidth !== lastWidth || window.innerHeight !== lastHeight) {
+          lastWidth = window.innerWidth;
+          lastHeight = window.innerHeight;
+          requestAnimationFrame(() => fitAddonRef.current?.fit());
+        }
       }
       document.addEventListener('visibilitychange', handleVisibilityChange);
       window.addEventListener('focus', handleFocus);
