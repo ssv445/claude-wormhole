@@ -740,13 +740,23 @@ export function TerminalView({
         connectWebSocket(term);
       };
 
-      // Reconnect immediately when iOS PWA returns from background
+      // Reconnect + refit when iOS PWA returns from background or tab regains focus
       function handleVisibilityChange() {
-        if (document.visibilityState === 'visible' && wsRef.current?.readyState !== WebSocket.OPEN) {
-          connectRef.current?.();
+        if (document.visibilityState === 'visible') {
+          if (wsRef.current?.readyState !== WebSocket.OPEN) {
+            connectRef.current?.();
+          }
+          // Refit terminal — dimensions may have changed while backgrounded (e.g. device switch, rotation).
+          // This bypasses the ResizeObserver keyboard guard intentionally: a one-time fit on visibility
+          // change is safe even with keyboard open, unlike continuous ResizeObserver firings.
+          requestAnimationFrame(() => fitAddonRef.current?.fit());
         }
       }
+      function handleFocus() {
+        requestAnimationFrame(() => fitAddonRef.current?.fit());
+      }
       document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('focus', handleFocus);
 
       // Initial connection
       connectWebSocket(term);
@@ -754,6 +764,7 @@ export function TerminalView({
 
       return () => {
         document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('focus', handleFocus);
         termContainer.removeEventListener('touchstart', onTouchStart, { capture: true });
         termContainer.removeEventListener('touchmove', onTouchMove, { capture: true });
         termContainer.removeEventListener('touchend', onTouchEnd, { capture: true });
@@ -789,14 +800,6 @@ export function TerminalView({
       style={{
         display: visible ? 'flex' : 'none',
         backgroundColor: XTERM_THEMES[theme].background,
-        // Translate up when native keyboard is open — avoids terminal resize/re-render
-        ...(nativeKeyboardHeight > 0 ? {
-          transform: `translateY(-${nativeKeyboardHeight}px)`,
-          transition: 'transform 0.1s ease-out',
-        } : {
-          transform: 'translateY(0)',
-          transition: 'transform 0.1s ease-out',
-        }),
       }}
     >
       {/* Terminal + reconnect overlay */}
@@ -945,8 +948,8 @@ export function TerminalView({
               </div>
             ))}
           </div>
-          {/* Safe area bleed — half-height, terminal bg so it blends in */}
-          <div style={{ height: 'calc(env(safe-area-inset-bottom) / 2)', backgroundColor: XTERM_THEMES[theme].background }} />
+          {/* Safe area bleed — zero when keyboard open (home indicator hidden), full otherwise */}
+          <div style={{ height: nativeKeyboardHeight > 0 ? '0px' : 'env(safe-area-inset-bottom)', backgroundColor: XTERM_THEMES[theme].background }} />
         </div>
       )}
 
@@ -993,8 +996,8 @@ export function TerminalView({
               </button>
             </div>
           </div>
-          {/* Safe area bleed — half-height, terminal bg so it blends in */}
-          <div style={{ height: 'calc(env(safe-area-inset-bottom) / 2)', backgroundColor: XTERM_THEMES[theme].background }} />
+          {/* Safe area bleed — zero when keyboard open (home indicator hidden), full otherwise */}
+          <div style={{ height: nativeKeyboardHeight > 0 ? '0px' : 'env(safe-area-inset-bottom)', backgroundColor: XTERM_THEMES[theme].background }} />
         </div>
       )}
 
@@ -1003,7 +1006,7 @@ export function TerminalView({
           Safe area padding keeps buttons above the home indicator; terminal bg makes bleed invisible. */}
       <div
         className="shrink-0 md:hidden"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) / 2)', backgroundColor: XTERM_THEMES[theme].background }}
+        style={{ paddingBottom: nativeKeyboardHeight > 0 ? '0px' : 'env(safe-area-inset-bottom)', backgroundColor: XTERM_THEMES[theme].background }}
       >
         {/* Visible bar — gray background with border */}
         <div className="bg-gray-900 border-t border-gray-700/50">

@@ -249,8 +249,17 @@ export default function Home() {
         </div>
       )}
 
-      {/* Main area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* Main area — translateY shifts entire content up when native keyboard opens */}
+      <div
+        className="flex-1 flex flex-col min-w-0"
+        style={nativeKeyboardHeight > 0 ? {
+          transform: `translateY(-${nativeKeyboardHeight}px)`,
+          transition: 'transform 0.1s ease-out',
+        } : {
+          transform: 'translateY(0)',
+          transition: 'transform 0.1s ease-out',
+        }}
+      >
         {/* Mobile top bar — hamburger + active tab name only */}
         <div className="flex items-center bg-surface border-b border-border shrink-0 md:hidden" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
           <button
