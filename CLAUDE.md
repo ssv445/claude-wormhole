@@ -88,15 +88,13 @@ wormhole service logs          # Tail logs
 ### Scrollback lives in tmux, NOT xterm.js
 - xterm.js only holds the few lines it receives on screen. Historical output is in tmux's scrollback buffer.
 - `term.scrollLines()` is nearly useless — it only scrolls xterm's tiny local buffer.
-- To scroll tmux's buffer, send **SGR mouse wheel escape sequences** through the WebSocket:
-  - Scroll up: `\x1b[<64;1;1M`
-  - Scroll down: `\x1b[<65;1;1M`
-- tmux with `mouse on` auto-enters copy mode on scroll up — no manual copy mode management needed.
 
-### Claude Code consumes PgUp/PgDn
-- PgUp/PgDn escape sequences get eaten by Claude Code running inside tmux.
-- To scroll past Claude Code, use tmux prefix + `[` (`\x02[`) to enter copy mode first, then PgUp/PgDn.
-- The scroll buttons in the mobile UI use this approach as a fallback.
+### Claude Code captures mouse & keyboard events
+- Claude Code is a TUI that enables mouse tracking (`mouse_any_flag`). tmux's default `WheelUpPane` binding forwards SGR mouse wheel events to Claude Code instead of scrolling.
+- SGR mouse wheel sequences (`\x1b[<64;1;1M` etc.) do NOT work for scrollback while Claude Code is running.
+- **Working approach**: Enter tmux copy mode via prefix (`\x02[`), then send PgUp/PgDn (`\x1b[5~` / `\x1b[6~`). Both the scroll FAB buttons and touch scroll use this mechanism.
+- `scripts/tmux.conf` has a `WheelUpPane` override to force copy mode entry, bypassing `mouse_any_flag`. This helps but the copy mode + PgUp/PgDn approach is more reliable.
+- User exits copy mode via the "Exit copy mode" toolbar button (sends `q` to tmux).
 
 ### Touch event handling on iOS
 - xterm.js v5 sets `touch-action: none` on its canvas and may call `stopPropagation()` on touch events.

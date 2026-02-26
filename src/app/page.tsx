@@ -6,6 +6,8 @@ import { TerminalView } from '@/components/TerminalView';
 import { NewSessionDialog } from '@/components/NewSessionDialog';
 import { useTheme } from '@/lib/theme';
 
+const KEYBOARD_TRANSITION = 'transform 0.1s ease-out';
+
 function useFullscreen() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   // iOS doesn't support Fullscreen API — detect PWA mode instead
@@ -108,7 +110,6 @@ export default function Home() {
   }, []);
 
   // Memoized style for main area — avoids object allocation on every render
-  const KEYBOARD_TRANSITION = 'transform 0.1s ease-out';
   const mainAreaStyle = useMemo(() => ({
     transform: nativeKeyboardHeight > 0 ? `translateY(-${nativeKeyboardHeight}px)` : 'translateY(0)',
     transition: KEYBOARD_TRANSITION,
