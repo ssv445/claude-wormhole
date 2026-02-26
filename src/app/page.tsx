@@ -231,7 +231,7 @@ export default function Home() {
   );
 
   return (
-    <div className="fixed inset-0 flex">
+    <div className="fixed inset-0 flex bg-surface-alt">
       {/* Desktop sidebar — always visible */}
       <div className="hidden md:flex md:flex-col md:w-56 md:shrink-0 bg-surface border-r border-border">
         {sidebar}
@@ -261,20 +261,20 @@ export default function Home() {
         className="flex-1 flex flex-col min-w-0"
         style={mainAreaStyle}
       >
-        {/* Mobile top bar — hamburger + active tab name only */}
+        {/* Mobile top bar — compact: hamburger + session name + actions */}
         <div className="flex items-center bg-surface border-b border-border shrink-0 md:hidden" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
           <button
             onClick={() => setSidebarOpen(true)}
-            className="px-2.5 py-2 text-secondary hover:text-primary text-lg shrink-0 transition-colors"
+            className="px-2 py-1.5 text-secondary hover:text-primary text-base shrink-0 transition-colors"
             title="Sessions"
           >
             {'\u2630'}
           </button>
           <div className="flex-1 min-w-0 px-1">
             {activeTab ? (
-              <span className="text-sm font-mono truncate block">{activeTab}</span>
+              <span className="text-xs font-mono truncate block">{activeTab}</span>
             ) : (
-              <span className="text-sm font-bold tracking-tight flex items-center gap-1.5">
+              <span className="text-xs font-bold tracking-tight flex items-center gap-1.5">
                 <svg className="w-4 h-4 shrink-0" viewBox="0 0 512 512" fill="none">
                   <circle cx="256" cy="256" r="200" stroke="#da7756" strokeWidth="28" fill="none" opacity="0.3"/>
                   <circle cx="256" cy="256" r="145" stroke="#da7756" strokeWidth="24" fill="none" opacity="0.5"/>
