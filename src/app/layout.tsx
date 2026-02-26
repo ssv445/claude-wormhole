@@ -2,10 +2,12 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { PushRegistrar } from '@/components/PushRegistrar';
 
+const isDev = process.env.NODE_ENV === 'development';
+
 export const metadata: Metadata = {
-  title: 'Claude Wormhole',
+  title: isDev ? 'DEV WORMHOLE' : 'Claude Wormhole',
   description: 'Remote Claude Code session management',
-  manifest: '/manifest.json',
+  manifest: isDev ? '/manifest.dev.json' : '/manifest.json',
   icons: {
     icon: [
       { url: '/favicon.svg', type: 'image/svg+xml' },
@@ -15,7 +17,7 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    title: 'Claude Wormhole',
+    title: isDev ? 'DEV WORMHOLE' : 'Claude Wormhole',
     statusBarStyle: 'black-translucent',
   },
 };
