@@ -4,7 +4,7 @@ Access your Claude Code sessions from any device. Phone, browser, laptop — sam
 
 > **Why "wormhole"?** A wormhole connects two distant points instantly. claude-wormhole does the same — it connects you to your running Claude Code session from wherever you are, as if you never left your desk.
 
-[![Demo video](https://img.youtube.com/vi/f2igZfsvN4w/maxresdefault.jpg)](https://www.youtube.com/watch?v=f2igZfsvN4w)
+[![Demo video](https://img.youtube.com/vi/il_hSer5Uyk/maxresdefault.jpg)](https://www.youtube.com/watch?v=il_hSer5Uyk)
 
 ## The Problem
 
