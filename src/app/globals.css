@@ -38,12 +38,24 @@
   html, body {
     overflow: hidden;
     overscroll-behavior: none;
-    height: 100%;
+    /* min-height covers the full screen including iOS safe areas with viewport-fit=cover */
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  html {
+    /* Match body bg so iOS safe area bleed behind home indicator is never white */
+    background-color: #09090b;
   }
 
   body {
     background-color: #09090b;
     color: #e4e4e7;
+  }
+
+  /* Light mode — html bg must match for iOS safe area bleed */
+  html:has(body.light) {
+    background-color: #fafafa;
   }
 
   body.light {

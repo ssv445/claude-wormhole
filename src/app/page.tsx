@@ -71,6 +71,42 @@ export default function Home() {
     return () => vv.removeEventListener('resize', onResize);
   }, []);
 
+  // Left-edge swipe to open sidebar (mobile only)
+  useEffect(() => {
+    let startX = 0;
+    let startY = 0;
+    const EDGE_WIDTH = 30; // px from left edge to trigger
+    const MIN_SWIPE = 50;  // px horizontal distance to count as swipe
+
+    function onTouchStart(e: TouchEvent) {
+      const touch = e.touches[0];
+      if (touch.clientX <= EDGE_WIDTH) {
+        startX = touch.clientX;
+        startY = touch.clientY;
+      } else {
+        startX = -1; // not an edge swipe
+      }
+    }
+
+    function onTouchEnd(e: TouchEvent) {
+      if (startX < 0) return;
+      const touch = e.changedTouches[0];
+      const dx = touch.clientX - startX;
+      const dy = Math.abs(touch.clientY - startY);
+      // Horizontal swipe right, not too vertical
+      if (dx > MIN_SWIPE && dx > dy) {
+        setSidebarOpen(true);
+      }
+    }
+
+    document.addEventListener('touchstart', onTouchStart, { passive: true });
+    document.addEventListener('touchend', onTouchEnd, { passive: true });
+    return () => {
+      document.removeEventListener('touchstart', onTouchStart);
+      document.removeEventListener('touchend', onTouchEnd);
+    };
+  }, []);
+
   // Memoized style for main area — avoids object allocation on every render
   const KEYBOARD_TRANSITION = 'transform 0.1s ease-out';
   const mainAreaStyle = useMemo(() => ({

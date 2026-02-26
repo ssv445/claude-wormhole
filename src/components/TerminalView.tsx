@@ -634,6 +634,7 @@ export function TerminalView({
       let touchStartX = 0;
       let touchScrolling = false;
       let touchAccumulator = 0;
+      let inCopyMode = false; // track if we entered tmux copy mode this gesture
       const scrollSensitivity = 20; // px per scroll event
       let longPressTimer: ReturnType<typeof setTimeout> | null = null;
       const LONG_PRESS_MS = 500;
@@ -655,6 +656,7 @@ export function TerminalView({
         touchStartX = e.touches[0].clientX;
         touchScrolling = false;
         touchAccumulator = 0;
+        inCopyMode = false;
 
         // Start long-press timer
         cancelLongPress();
@@ -690,26 +692,37 @@ export function TerminalView({
         touchScrolling = true;
         e.preventDefault();
 
-        // Accumulate delta and send mouse wheel events
+        // Accumulate delta and scroll via tmux copy mode + PgUp/PgDn.
+        // Same mechanism as the scroll FAB buttons — the only approach that
+        // works while Claude Code is running (it captures mouse & arrow keys).
+        // Uses larger sensitivity since PgUp/PgDn jump full pages.
         touchAccumulator += deltaY;
-        const events = Math.trunc(touchAccumulator / scrollSensitivity);
+        const PG_THRESHOLD = 100; // px per page scroll
+        const events = Math.trunc(touchAccumulator / PG_THRESHOLD);
         if (events !== 0) {
-          // SGR mouse wheel: 64 = wheel up (scroll back), 65 = wheel down (scroll forward)
-          // Natural scroll: finger swipe up (positive deltaY) = scroll forward (newer content)
-          const btn = events > 0 ? 65 : 64;
+          // Enter copy mode once per gesture via tmux prefix
+          if (!inCopyMode) {
+            wsRef.current.send('\x02[');
+            inCopyMode = true;
+          }
+          // PgUp: \x1b[5~  PgDn: \x1b[6~
+          const key = events > 0 ? '\x1b[6~' : '\x1b[5~';
           const count = Math.abs(events);
           for (let i = 0; i < count; i++) {
-            wsRef.current.send(`\x1b[<${btn};1;1M`);
+            wsRef.current.send(key);
           }
-          touchAccumulator -= events * scrollSensitivity;
+          touchAccumulator -= events * PG_THRESHOLD;
         }
         touchStartY = e.touches[0].clientY;
       }
 
       function onTouchEnd() {
+        // Don't auto-exit copy mode — Claude Code would consume the 'q'.
+        // User can tap "Exit copy mode" button in the toolbar when done scrolling.
         cancelLongPress();
         touchScrolling = false;
         touchAccumulator = 0;
+        inCopyMode = false;
       }
 
       const termContainer = termRef.current;
@@ -956,7 +969,7 @@ export function TerminalView({
             ))}
           </div>
           {/* Safe area bleed — zero when keyboard open (home indicator hidden), full otherwise */}
-          <div style={{ height: nativeKeyboardHeight > 0 ? '0px' : 'env(safe-area-inset-bottom)', backgroundColor: XTERM_THEMES[theme].background }} />
+          <div style={{ height: nativeKeyboardHeight > 0 ? '0px' : 'calc(env(safe-area-inset-bottom) / 2)', backgroundColor: XTERM_THEMES[theme].background }} />
         </div>
       )}
 
@@ -1004,7 +1017,7 @@ export function TerminalView({
             </div>
           </div>
           {/* Safe area bleed — zero when keyboard open (home indicator hidden), full otherwise */}
-          <div style={{ height: nativeKeyboardHeight > 0 ? '0px' : 'env(safe-area-inset-bottom)', backgroundColor: XTERM_THEMES[theme].background }} />
+          <div style={{ height: nativeKeyboardHeight > 0 ? '0px' : 'calc(env(safe-area-inset-bottom) / 2)', backgroundColor: XTERM_THEMES[theme].background }} />
         </div>
       )}
 
@@ -1013,7 +1026,7 @@ export function TerminalView({
           Safe area padding keeps buttons above the home indicator; terminal bg makes bleed invisible. */}
       <div
         className="shrink-0 md:hidden"
-        style={{ paddingBottom: nativeKeyboardHeight > 0 ? '0px' : 'env(safe-area-inset-bottom)', backgroundColor: XTERM_THEMES[theme].background }}
+        style={{ paddingBottom: nativeKeyboardHeight > 0 ? '0px' : 'calc(env(safe-area-inset-bottom) / 2)', backgroundColor: XTERM_THEMES[theme].background }}
       >
         {/* Visible bar — gray background with border */}
         <div className="bg-gray-900 border-t border-gray-700/50">
@@ -1033,7 +1046,7 @@ export function TerminalView({
         <button
           onPointerDown={onTapDown}
           onPointerUp={() => { if (isTap()) sendKey('\x1b'); }}
-          className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
+          className="min-w-[40px] h-9 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
           title="Escape"
         >
           <span className="text-xs font-mono font-bold">Esc</span>
@@ -1042,7 +1055,7 @@ export function TerminalView({
         <button
           onPointerDown={onTapDown}
           onPointerUp={() => { if (isTap()) sendKey('\r'); }}
-          className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
+          className="min-w-[40px] h-9 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
           title="Enter"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
@@ -1054,7 +1067,7 @@ export function TerminalView({
         <button
           onPointerDown={onTapDown}
           onPointerUp={() => { if (isTap()) sendKey('\x1b[A'); }}
-          className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
+          className="min-w-[40px] h-9 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
           title="Up arrow"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1065,7 +1078,7 @@ export function TerminalView({
         <button
           onPointerDown={onTapDown}
           onPointerUp={() => { if (isTap()) sendKey('\x1b[B'); }}
-          className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
+          className="min-w-[40px] h-9 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
           title="Down arrow"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1079,7 +1092,7 @@ export function TerminalView({
         <button
           onPointerDown={(e) => { e.stopPropagation(); pointerDownTimeRef.current = Date.now(); }}
           onPointerUp={() => { if (isTap()) handlePaste(); }}
-          className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
+          className="min-w-[40px] h-9 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
           title="Paste text"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
@@ -1090,7 +1103,7 @@ export function TerminalView({
             which burns iOS user activation before input.click() can fire) */}
         <button
           onClick={handleFileAttach}
-          className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
+          className="min-w-[40px] h-9 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
           title="Attach file"
           disabled={attachStatus === 'uploading'}
         >
@@ -1109,7 +1122,7 @@ export function TerminalView({
         <button
           onPointerDown={onTapDown}
           onPointerUp={() => { if (isTap()) openCompose(); }}
-          className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
+          className="min-w-[40px] h-9 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
           title="Voice input"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
@@ -1122,7 +1135,7 @@ export function TerminalView({
         {/* Keyboard toggle */}
         <button
           onClick={() => setKeyboardVisible(!keyboardVisible)}
-          className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
+          className="min-w-[40px] h-9 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
           title={keyboardVisible ? 'Hide keyboard' : 'Show keyboard'}
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
@@ -1141,7 +1154,7 @@ export function TerminalView({
         <button
           onPointerDown={onTapDown}
           onPointerUp={() => { if (isTap()) sendKey('q'); }}
-          className="min-w-[44px] h-11 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
+          className="min-w-[40px] h-9 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
           title="Exit copy mode (back to input)"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
