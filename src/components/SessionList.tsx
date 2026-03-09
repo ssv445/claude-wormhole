@@ -10,6 +10,7 @@ interface SessionInfo {
   workingDir: string;
   lastActivity: string;
   claudeHint: 'idle' | 'busy' | null;
+  paused: boolean;
 }
 
 export function SessionList({
@@ -36,6 +37,7 @@ export function SessionList({
   const [editingSession, setEditingSession] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const editInputRef = useRef<HTMLInputElement>(null);
+  const [confirmingPause, setConfirmingPause] = useState<string | null>(null);
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -190,6 +192,29 @@ export function SessionList({
     setEditingSession(null);
   };
 
+  const handlePauseResume = async (name: string, action: 'pause' | 'resume') => {
+    try {
+      await fetch('/api/sessions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, name }),
+      });
+      fetchSessions();
+    } catch {
+      // silent
+    }
+    setConfirmingPause(null);
+  };
+
+  const onPauseClick = (s: SessionInfo, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (s.claudeHint === 'busy') {
+      setConfirmingPause(s.name);
+    } else {
+      handlePauseResume(s.name, 'pause');
+    }
+  };
+
   // Render a session item
   const renderSession = (s: SessionInfo) => {
     const isOpen = openTabs.includes(s.name);
@@ -208,7 +233,7 @@ export function SessionList({
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOpen ? 'bg-green-400' : 'bg-muted'}`} />
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.paused ? 'bg-blue-400' : isOpen ? 'bg-green-400' : 'bg-muted'}`} />
             {isEditing ? (
               <input
                 ref={editInputRef}
@@ -238,28 +263,69 @@ export function SessionList({
             )}
           </div>
           <div className="text-xs text-muted ml-3 truncate flex items-center gap-1.5">
-            {s.claudeHint === 'idle' && (
+            {s.paused && (
+              <span className="text-blue-400" title="Frozen (SIGSTOP)">paused</span>
+            )}
+            {!s.paused && s.claudeHint === 'idle' && (
               <span className="text-yellow-400" title="Waiting for input">waiting</span>
             )}
-            {s.claudeHint === 'busy' && (
+            {!s.paused && s.claudeHint === 'busy' && (
               <span className="text-green-400 animate-pulse" title="Working">busy</span>
             )}
             {s.lastActivity}
           </div>
         </div>
 
-        {isOpen && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDetach(s.name);
-            }}
-            className="text-xs text-muted hover:text-primary shrink-0 px-1.5 py-0.5 rounded transition-colors hover:bg-surface"
-            title="Detach"
-          >
-            detach
-          </button>
-        )}
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Pause confirmation for busy sessions */}
+          {confirmingPause === s.name && (
+            <div className="flex items-center gap-1 text-xs">
+              <span className="text-yellow-400">busy!</span>
+              <button
+                onClick={(e) => { e.stopPropagation(); handlePauseResume(s.name, 'pause'); }}
+                className="text-red-400 hover:text-red-300 px-1 py-0.5 rounded hover:bg-surface"
+              >pause</button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setConfirmingPause(null); }}
+                className="text-muted hover:text-primary px-1 py-0.5 rounded hover:bg-surface"
+              >cancel</button>
+            </div>
+          )}
+
+          {/* Pause/resume toggle */}
+          {confirmingPause !== s.name && (
+            s.paused ? (
+              <button
+                onClick={(e) => { e.stopPropagation(); handlePauseResume(s.name, 'resume'); }}
+                className="text-xs text-blue-400 hover:text-blue-300 shrink-0 px-1.5 py-0.5 rounded transition-colors hover:bg-surface"
+                title="Resume (SIGCONT)"
+              >
+                resume
+              </button>
+            ) : (
+              <button
+                onClick={(e) => onPauseClick(s, e)}
+                className="text-xs text-muted hover:text-primary shrink-0 px-1.5 py-0.5 rounded transition-colors hover:bg-surface"
+                title="Pause (SIGSTOP)"
+              >
+                pause
+              </button>
+            )
+          )}
+
+          {isOpen && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDetach(s.name);
+              }}
+              className="text-xs text-muted hover:text-primary shrink-0 px-1.5 py-0.5 rounded transition-colors hover:bg-surface"
+              title="Detach"
+            >
+              detach
+            </button>
+          )}
+        </div>
       </div>
     );
   };

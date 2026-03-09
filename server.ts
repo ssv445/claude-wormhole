@@ -8,6 +8,7 @@ import { execFile, execFileSync } from 'child_process';
 import { promisify } from 'util';
 import next from 'next';
 import { WebSocketServer, WebSocket } from 'ws';
+import { isSessionPaused, resumeSession, cleanupPauseMarkers } from './src/lib/tmux';
 
 const dev = process.env.NODE_ENV !== 'production';
 // Dev: bind 0.0.0.0 so simulators and LAN devices can connect
@@ -69,6 +70,11 @@ app.prepare().then(() => {
     }
   } catch { /* ignore */ }
 
+  // Resume any sessions that were paused when the server last stopped
+  cleanupPauseMarkers().catch((err) => {
+    console.warn('Failed to clean up pause markers:', err);
+  });
+
   const server = createServer((req, res) => {
     // Prevent iOS from HTTP-caching sw.js — stale SW causes PWA deadlock
     if (req.url === '/sw.js') {
@@ -109,6 +115,16 @@ app.prepare().then(() => {
       ws.send(`\x1b[33mRun "tmux ls" to see available sessions.\x1b[0m\r\n`);
       ws.close(1008, `Session not found: ${session}`);
       return;
+    }
+
+    // Auto-resume paused sessions when someone attaches
+    if (isSessionPaused(session)) {
+      try {
+        await resumeSession(session);
+        console.log(`Auto-resumed paused session: ${session}`);
+      } catch (err) {
+        console.warn(`Failed to auto-resume session ${session}:`, err);
+      }
     }
 
     // Lazy-require node-pty so Next.js webpack doesn't try to bundle it
