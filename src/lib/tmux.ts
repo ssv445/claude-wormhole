@@ -200,13 +200,16 @@ export async function resumeSession(name: string): Promise<void> {
   try { unlinkSync(`${PAUSE_DIR}/${name}`); } catch { /* already removed */ }
 }
 
-/** Clean up stale pause markers on startup — resume or remove orphans */
+/** Clean up orphan pause markers on startup — only remove markers for dead sessions.
+ *  Intentionally paused sessions stay paused across server restarts. */
 export async function cleanupPauseMarkers(): Promise<void> {
   if (!existsSync(PAUSE_DIR)) return;
   for (const name of readdirSync(PAUSE_DIR)) {
+    // Check if the tmux session still exists
     try {
-      await resumeSession(name);
-      console.log(`Resumed stale paused session: ${name}`);
+      await execFileAsync('tmux', ['has-session', '-t', name]);
+      // Session exists and is paused — leave it alone
+      console.log(`Paused session preserved: ${name}`);
     } catch {
       // Session no longer exists — remove orphan marker
       try { unlinkSync(`${PAUSE_DIR}/${name}`); } catch { /* ignore */ }
