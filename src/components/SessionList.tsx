@@ -22,6 +22,7 @@ export function SessionList({
   onRefresh,
   onNewInDir,
   onRename,
+  onKill,
 }: {
   refreshKey: number;
   openTabs: string[];
@@ -31,13 +32,16 @@ export function SessionList({
   onRefresh: () => void;
   onNewInDir?: (workingDir: string) => void;
   onRename?: (oldName: string, newName: string) => void;
+  onKill?: (name: string) => void;
 }) {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingSession, setEditingSession] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const editInputRef = useRef<HTMLInputElement>(null);
-  const [confirmingPause, setConfirmingPause] = useState<string | null>(null);
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [confirmingAction, setConfirmingAction] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -56,6 +60,29 @@ export function SessionList({
     const interval = setInterval(fetchSessions, 5000);
     return () => clearInterval(interval);
   }, [fetchSessions, refreshKey]);
+
+  // Close menu on outside click or Escape
+  useEffect(() => {
+    if (!openMenu) return;
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenu(null);
+        setConfirmingAction(null);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpenMenu(null);
+        setConfirmingAction(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [openMenu]);
 
   if (loading) {
     return <p className="text-muted text-sm px-2">Loading...</p>;
@@ -117,12 +144,10 @@ export function SessionList({
     const result: DirectoryGroup[] = [];
 
     groups.forEach((groupSessions, dir) => {
-      // Sort sessions within group by name
       const sortedSessions = [...groupSessions].sort((a, b) =>
         parseActivityTime(b.lastActivity).getTime() - parseActivityTime(a.lastActivity).getTime()
       );
 
-      // Find most recent activity in this group
       const mostRecent = groupSessions.reduce((latest, session) => {
         const sessionTime = parseActivityTime(session.lastActivity);
         return sessionTime > latest ? sessionTime : latest;
@@ -203,16 +228,6 @@ export function SessionList({
     } catch {
       // silent
     }
-    setConfirmingPause(null);
-  };
-
-  const onPauseClick = (s: SessionInfo, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (s.claudeHint === 'busy') {
-      setConfirmingPause(s.name);
-    } else {
-      handlePauseResume(s.name, 'pause');
-    }
   };
 
   // Render a session item
@@ -220,11 +235,12 @@ export function SessionList({
     const isOpen = openTabs.includes(s.name);
     const isActive = s.name === activeTab;
     const isEditing = editingSession === s.name;
+    const isMenuOpen = openMenu === s.name;
 
     return (
       <div
         key={s.name}
-        className={`flex items-center justify-between gap-2 pl-6 pr-2.5 py-2 rounded-lg cursor-pointer transition-colors ${
+        className={`flex items-center justify-between gap-2 pl-6 pr-1.5 py-2 rounded-lg cursor-pointer transition-colors ${
           isActive
             ? 'bg-surface-hover text-primary'
             : 'text-secondary hover:bg-surface-hover hover:text-primary'
@@ -248,16 +264,7 @@ export function SessionList({
                 onClick={(e) => e.stopPropagation()}
               />
             ) : (
-              <span
-                className="font-mono text-sm truncate"
-                onDoubleClick={(e) => {
-                  e.stopPropagation();
-                  setEditingSession(s.name);
-                  setEditValue(s.name);
-                  setTimeout(() => editInputRef.current?.select(), 0);
-                }}
-                title="Double-click to rename"
-              >
+              <span className="font-mono text-sm truncate">
                 {s.name}
               </span>
             )}
@@ -276,54 +283,126 @@ export function SessionList({
           </div>
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
-          {/* Pause confirmation for busy sessions */}
-          {confirmingPause === s.name && (
-            <div className="flex items-center gap-1 text-xs">
-              <span className="text-yellow-400">busy!</span>
+        {/* Dropdown menu trigger */}
+        <div className="relative shrink-0" ref={isMenuOpen ? menuRef : undefined}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpenMenu(isMenuOpen ? null : s.name);
+              setConfirmingAction(null);
+            }}
+            className="w-8 h-8 flex items-center justify-center text-muted hover:text-primary rounded transition-colors hover:bg-surface"
+            title="Actions"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
+              <circle cx="8" cy="3" r="1.5" />
+              <circle cx="8" cy="8" r="1.5" />
+              <circle cx="8" cy="13" r="1.5" />
+            </svg>
+          </button>
+
+          {isMenuOpen && (
+            <div className="absolute right-0 top-full mt-1 w-36 bg-surface border border-border rounded-lg shadow-lg z-50 py-1 text-sm">
+              {/* Pause / Resume */}
+              {s.paused ? (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePauseResume(s.name, 'resume');
+                    setOpenMenu(null);
+                  }}
+                  className="w-full text-left px-3 py-2.5 text-blue-400 hover:bg-surface-hover transition-colors"
+                >
+                  Resume
+                </button>
+              ) : confirmingAction === s.name ? (
+                <div className="px-3 py-2.5">
+                  <div className="text-yellow-400 text-xs mb-1.5">Session is busy!</div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePauseResume(s.name, 'pause');
+                        setOpenMenu(null);
+                        setConfirmingAction(null);
+                      }}
+                      className="text-red-400 hover:text-red-300 text-xs"
+                    >
+                      Pause anyway
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setConfirmingAction(null);
+                      }}
+                      className="text-muted hover:text-primary text-xs"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (s.claudeHint === 'busy') {
+                      setConfirmingAction(s.name);
+                    } else {
+                      handlePauseResume(s.name, 'pause');
+                      setOpenMenu(null);
+                    }
+                  }}
+                  className="w-full text-left px-3 py-2.5 text-secondary hover:bg-surface-hover transition-colors"
+                >
+                  Pause
+                </button>
+              )}
+
+              {/* Detach — only if session is open in a tab */}
+              {isOpen && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDetach(s.name);
+                    setOpenMenu(null);
+                  }}
+                  className="w-full text-left px-3 py-2.5 text-secondary hover:bg-surface-hover transition-colors"
+                >
+                  Detach
+                </button>
+              )}
+
+              {/* Rename */}
               <button
-                onClick={(e) => { e.stopPropagation(); handlePauseResume(s.name, 'pause'); }}
-                className="text-red-400 hover:text-red-300 px-1 py-0.5 rounded hover:bg-surface"
-              >pause</button>
-              <button
-                onClick={(e) => { e.stopPropagation(); setConfirmingPause(null); }}
-                className="text-muted hover:text-primary px-1 py-0.5 rounded hover:bg-surface"
-              >cancel</button>
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenMenu(null);
+                  setEditingSession(s.name);
+                  setEditValue(s.name);
+                  setTimeout(() => editInputRef.current?.select(), 0);
+                }}
+                className="w-full text-left px-3 py-2.5 text-secondary hover:bg-surface-hover transition-colors"
+              >
+                Rename
+              </button>
+
+              {/* Kill — destructive, separated */}
+              {onKill && (
+                <>
+                  <div className="border-t border-border my-1" />
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onKill(s.name);
+                      setOpenMenu(null);
+                    }}
+                    className="w-full text-left px-3 py-2.5 text-red-400 hover:bg-surface-hover transition-colors"
+                  >
+                    Kill
+                  </button>
+                </>
+              )}
             </div>
-          )}
-
-          {/* Pause/resume toggle */}
-          {confirmingPause !== s.name && (
-            s.paused ? (
-              <button
-                onClick={(e) => { e.stopPropagation(); handlePauseResume(s.name, 'resume'); }}
-                className="text-xs text-blue-400 hover:text-blue-300 shrink-0 px-1.5 py-0.5 rounded transition-colors hover:bg-surface"
-                title="Resume (SIGCONT)"
-              >
-                resume
-              </button>
-            ) : (
-              <button
-                onClick={(e) => onPauseClick(s, e)}
-                className="text-xs text-muted hover:text-primary shrink-0 px-1.5 py-0.5 rounded transition-colors hover:bg-surface"
-                title="Pause (SIGSTOP)"
-              >
-                pause
-              </button>
-            )
-          )}
-
-          {isOpen && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDetach(s.name);
-              }}
-              className="text-xs text-muted hover:text-primary shrink-0 px-1.5 py-0.5 rounded transition-colors hover:bg-surface"
-              title="Detach"
-            >
-              detach
-            </button>
           )}
         </div>
       </div>

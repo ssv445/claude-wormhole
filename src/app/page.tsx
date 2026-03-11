@@ -180,6 +180,18 @@ export default function Home() {
     });
   }, []);
 
+  const killSession = useCallback(async (name: string) => {
+    try {
+      await fetch('/api/sessions', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      detachSession(name);
+      setRefreshKey((k) => k + 1);
+    } catch { /* silent */ }
+  }, [detachSession]);
+
   // Sidebar content — shared between mobile drawer and desktop pinned sidebar
   const sidebar = (
     <>
@@ -254,6 +266,7 @@ export default function Home() {
           onRefresh={() => setRefreshKey((k) => k + 1)}
           onNewInDir={(dir) => { setNewSessionDir(dir); setShowNewDialog(true); }}
           onRename={renameSession}
+          onKill={killSession}
         />
       </div>
       {/* Build version — tap to force reload */}
@@ -369,6 +382,7 @@ export default function Home() {
                   onDetach={detachSession}
                   onRefresh={() => setRefreshKey((k) => k + 1)}
                   onRename={renameSession}
+                  onKill={killSession}
                 />
               </div>
             </div>
