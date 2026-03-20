@@ -381,6 +381,7 @@ export default function Home() {
                   onAttach={attachSession}
                   onDetach={detachSession}
                   onRefresh={() => setRefreshKey((k) => k + 1)}
+                  onNewInDir={(dir) => { setNewSessionDir(dir); setShowNewDialog(true); }}
                   onRename={renameSession}
                   onKill={killSession}
                 />

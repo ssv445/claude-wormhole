@@ -6,3 +6,4 @@ dist/
 data/
 test-results/
 build-version.json
+.worktrees/
