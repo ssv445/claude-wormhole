@@ -726,6 +726,20 @@ export function TerminalView({
       }
 
       const termContainer = termRef.current;
+      // Right-click: copy selection if any, otherwise enter selection mode.
+      // Suppresses native context menu inside the terminal.
+      const onContextMenu = (e: MouseEvent) => {
+        e.preventDefault();
+        const sel = term.getSelection();
+        if (sel) {
+          navigator.clipboard.writeText(sel).catch(() => {});
+          term.clearSelection();
+        } else if (enterSelectionRef.current) {
+          enterSelectionRef.current();
+        }
+      };
+      termContainer.addEventListener('contextmenu', onContextMenu);
+
       termContainer.addEventListener('touchstart', onTouchStart, { capture: true, passive: true });
       termContainer.addEventListener('touchmove', onTouchMove, { capture: true, passive: false });
       termContainer.addEventListener('touchend', onTouchEnd, { capture: true, passive: true });
@@ -785,6 +799,7 @@ export function TerminalView({
       return () => {
         document.removeEventListener('visibilitychange', handleVisibilityChange);
         window.removeEventListener('focus', handleFocus);
+        termContainer.removeEventListener('contextmenu', onContextMenu);
         termContainer.removeEventListener('touchstart', onTouchStart, { capture: true });
         termContainer.removeEventListener('touchmove', onTouchMove, { capture: true });
         termContainer.removeEventListener('touchend', onTouchEnd, { capture: true });
@@ -860,7 +875,7 @@ export function TerminalView({
 
         {/* Selection mode bar — shown when long-press activates selection */}
         {selectionMode && (
-          <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-3 py-2 bg-blue-600/90 backdrop-blur-sm md:hidden">
+          <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-3 py-2 bg-blue-600/90 backdrop-blur-sm">
             <span className="text-white text-xs font-mono">Selection mode</span>
             <div className="flex items-center gap-2">
               <button
