@@ -223,6 +223,19 @@ export function SessionList({
     }
   };
 
+  const handleRestart = async (name: string) => {
+    try {
+      await fetch('/api/sessions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'restart', name }),
+      });
+      fetchSessions();
+    } catch {
+      // silent
+    }
+  };
+
   // Render a session item
   const renderSession = (s: SessionInfo) => {
     const isOpen = openTabs.includes(s.name);
@@ -364,6 +377,18 @@ export function SessionList({
                   Detach
                 </button>
               )}
+
+              {/* Restart — exits Claude and resumes with same session ID */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRestart(s.name);
+                  setOpenMenu(null);
+                }}
+                className="w-full text-left px-3 py-2.5 text-secondary hover:bg-surface-hover transition-colors"
+              >
+                Restart
+              </button>
 
               {/* Rename */}
               <button

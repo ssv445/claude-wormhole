@@ -367,6 +367,18 @@ cmd_statusline() {
   local input
   input=$(cat)
 
+  # Cache Claude session ID per tmux session for restart support.
+  # The statusline runs inside tmux, so we can get the tmux session name.
+  local claude_session_id
+  claude_session_id=$(echo "$input" | jq -r '.session_id // empty')
+  if [ -n "$claude_session_id" ] && [ -n "${TMUX:-}" ]; then
+    local tmux_session
+    tmux_session=$(tmux display-message -p '#{session_name}' 2>/dev/null)
+    if [ -n "$tmux_session" ]; then
+      echo "$claude_session_id" > "/tmp/wormhole-claude-session-${tmux_session}"
+    fi
+  fi
+
   # Extract fields (null-safe)
   local model dir dir_name pct cost duration_ms lines_added lines_removed
   model=$(echo "$input" | jq -r '.model.display_name // "?"')

@@ -1,6 +1,6 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { existsSync, mkdirSync, writeFileSync, unlinkSync, readdirSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync, unlinkSync, readdirSync, readFileSync } from 'fs';
 
 const execFileAsync = promisify(execFile);
 
@@ -122,6 +122,50 @@ export async function killSession(name: string): Promise<void> {
     try { await resumeSession(name); } catch { /* proceed with kill regardless */ }
   }
   await execFileAsync('tmux', ['kill-session', '-t', name]);
+}
+
+/** Restart the Claude Code process inside a tmux session.
+ *  Reads the cached Claude session ID (written by the statusline hook),
+ *  sends /exit to quit the running Claude, then launches cld --resume. */
+export async function restartClaudeSession(name: string): Promise<void> {
+  validateSessionName(name);
+
+  // Read cached Claude session ID written by statusline hook
+  const cacheFile = `/tmp/wormhole-claude-session-${name}`;
+  let claudeSessionId: string | null = null;
+  try {
+    claudeSessionId = readFileSync(cacheFile, 'utf8').trim();
+  } catch {
+    // no cached session ID
+  }
+  if (!claudeSessionId) {
+    throw new Error(`No Claude session ID cached for "${name}". Has the session run recently?`);
+  }
+
+  // Send /exit + Enter to quit the running Claude Code process
+  await execFileAsync('tmux', ['send-keys', '-t', name, '/exit', 'Enter']);
+
+  // Wait for the Claude process to exit (poll for shell prompt)
+  const maxWait = 10_000;
+  const start = Date.now();
+  while (Date.now() - start < maxWait) {
+    await new Promise(r => setTimeout(r, 500));
+    try {
+      const { stdout } = await execFileAsync('tmux', [
+        'capture-pane', '-t', name, '-p',
+      ]);
+      const lastLines = stdout.trimEnd().split('\n').slice(-3).join('');
+      // Shell prompt: ends with $ or % (zsh/bash prompt after Claude exits)
+      if (/[$%#]\s*$/.test(lastLines)) break;
+    } catch {
+      break;
+    }
+  }
+
+  // Restart with cld --resume <sessionId>
+  await execFileAsync('tmux', [
+    'send-keys', '-t', name, `cld --resume ${claudeSessionId}`, 'Enter',
+  ]);
 }
 
 function formatLastActivity(timestamp: number): string {

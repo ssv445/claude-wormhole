@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { listSessionsWithInfo, newSession, killSession, renameSession, pauseSession, resumeSession } from '@/lib/tmux';
+import { listSessionsWithInfo, newSession, killSession, renameSession, pauseSession, resumeSession, restartClaudeSession } from '@/lib/tmux';
 
 export async function GET() {
   const sessions = await listSessionsWithInfo();
@@ -22,6 +22,21 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const body = await req.json();
+
+  // Restart Claude Code inside the tmux session
+  if (body.action === 'restart') {
+    const { name } = body;
+    if (!name || typeof name !== 'string') {
+      return NextResponse.json({ error: 'name is required' }, { status: 400 });
+    }
+    try {
+      await restartClaudeSession(name);
+      return NextResponse.json({ ok: true });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to restart session';
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
+  }
 
   // Pause/resume actions
   if (body.action === 'pause' || body.action === 'resume') {
