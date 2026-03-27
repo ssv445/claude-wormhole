@@ -255,7 +255,20 @@ export function SessionList({
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.paused ? 'bg-blue-400' : isOpen ? 'bg-green-400' : 'bg-muted'}`} />
+            <span
+              className={`w-2 h-2 rounded-full shrink-0 ${
+                s.paused
+                  ? 'bg-blue-400'                                    // Paused: solid blue
+                  : s.claudeHint === 'busy'
+                    ? 'bg-green-400 animate-pulse'                   // Busy: pulsing green
+                    : s.claudeHint === 'idle'
+                      ? 'bg-yellow-400'                              // Waiting: solid amber
+                      : 'border border-muted bg-transparent'         // Unknown/no state: hollow ring
+              }`}
+              title={
+                s.paused ? 'Paused' : s.claudeHint === 'busy' ? 'Working' : s.claudeHint === 'idle' ? 'Waiting for input' : 'Idle'
+              }
+            />
             {isEditing ? (
               <input
                 ref={editInputRef}
@@ -279,14 +292,8 @@ export function SessionList({
             {s.paused && (
               <span className="text-blue-400" title="Frozen (SIGSTOP)">paused</span>
             )}
-            {/* Only show "waiting" for the active tab — the one the user is
-                currently interacting with. Other idle sessions have completed
-                their work and don't need a status label. */}
-            {!s.paused && s.claudeHint === 'idle' && isActive && (
+            {!s.paused && s.claudeHint === 'idle' && (
               <span className="text-yellow-400" title="Waiting for input">waiting</span>
-            )}
-            {!s.paused && s.claudeHint === 'busy' && (
-              <span className="text-green-400 animate-pulse" title="Working">busy</span>
             )}
             {s.lastActivity}
           </div>

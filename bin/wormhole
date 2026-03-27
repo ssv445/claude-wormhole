@@ -329,6 +329,7 @@ cmd_cld() {
 
 cmd_notify() {
   # Reads hook event JSON from stdin, POSTs to /api/notify.
+  # Also writes Claude state per tmux session for the sidebar status dots.
   # Skip notifications from subagents — only the main session should notify.
   if [ -n "${CLAUDE_CODE_AGENT_ID:-}" ]; then
     exit 0
@@ -336,18 +337,40 @@ cmd_notify() {
 
   local input
   input=$(cat)
-  local notification_type message title tmux_session type
+  local hook_event notification_type message title tmux_session type
 
+  hook_event=$(echo "$input" | jq -r '.hook_event_name // ""')
   notification_type=$(echo "$input" | jq -r '.notification_type // "stop"')
   message=$(echo "$input" | jq -r '.message // "Claude finished"')
   title=$(echo "$input" | jq -r '.title // ""')
   tmux_session=$(tmux display-message -p '#{session_name}' 2>/dev/null || echo "unknown")
+
+  # Write Claude state file for sidebar status indicators.
+  # State transitions: UserPromptSubmit→busy, Stop→idle, permission_prompt→permission
+  local state_file="/tmp/wormhole-claude-state-${tmux_session}"
+  case "$hook_event" in
+    UserPromptSubmit) echo "busy" > "$state_file" ;;
+    Stop)             echo "idle" > "$state_file" ;;
+    StopFailure)      echo "error" > "$state_file" ;;
+    Notification)
+      case "$notification_type" in
+        permission_prompt) echo "permission" > "$state_file" ;;
+        idle_prompt)       echo "idle" > "$state_file" ;;
+      esac
+      ;;
+  esac
 
   case "$notification_type" in
     permission_prompt) type="permission" ;;
     idle_prompt)       type="idle" ;;
     stop)              type="stop"; message="${title:-Claude finished}" ;;
     *)                 type="$notification_type" ;;
+  esac
+
+  # For Stop/StopFailure hooks, override type from hook_event_name
+  case "$hook_event" in
+    Stop)        type="stop"; message="${title:-Claude finished}" ;;
+    StopFailure) type="error"; message="${title:-Claude error}" ;;
   esac
 
   local payload

@@ -73,18 +73,18 @@ export async function listSessionsWithInfo(): Promise<SessionInfo[]> {
         // keep session_path as fallback
       }
 
-      // Detect Claude Code state by checking pane content for the ❯ prompt
-      if (session.attached) {
-        try {
-          const { stdout: paneContent } = await execFileAsync('tmux', [
-            'capture-pane', '-t', session.name, '-p',
-          ]);
-          const lines = paneContent.trimEnd().split('\n');
-          const lastLines = lines.slice(-5).join('');
-          session.claudeHint = lastLines.includes('❯') ? 'idle' : 'busy';
-        } catch {
-          // can't read pane
+      // Read Claude state from hook-written file (no tmux pane polling needed).
+      // State files are written by the notify hook on UserPromptSubmit, Stop, etc.
+      try {
+        const state = readFileSync(`/tmp/wormhole-claude-state-${session.name}`, 'utf8').trim();
+        if (state === 'busy' || state === 'permission') {
+          session.claudeHint = 'busy';
+        } else if (state === 'idle') {
+          session.claudeHint = 'idle';
         }
+        // 'error' and unknown values → null (no hint)
+      } catch {
+        // no state file — session hasn't triggered hooks yet
       }
     }
 
