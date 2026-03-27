@@ -1,42 +1,17 @@
 'use client';
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { SessionList } from '@/components/SessionList';
 import { TerminalView } from '@/components/TerminalView';
 import { NewSessionDialog } from '@/components/NewSessionDialog';
 import { Sidebar } from '@/components/Sidebar';
 import { useTheme } from '@/lib/theme';
+import { initViewport } from '@/lib/viewport';
+import { useViewport } from '@/hooks/useViewport';
 
-const KEYBOARD_TRANSITION = 'transform 0.1s ease-out';
-
-function useFullscreen() {
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  // iOS doesn't support Fullscreen API — detect PWA mode instead
-  const [isIOS, setIsIOS] = useState(false);
-  const [isPWA, setIsPWA] = useState(false);
-
-  useEffect(() => {
-    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    setIsIOS(ios);
-    // standalone = already running as PWA (added to home screen)
-    const standalone = window.matchMedia('(display-mode: standalone)').matches
-      || ('standalone' in navigator && (navigator as { standalone?: boolean }).standalone === true);
-    setIsPWA(standalone);
-
-    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', onChange);
-    return () => document.removeEventListener('fullscreenchange', onChange);
-  }, []);
-
-  const toggle = useCallback(() => {
-    if (document.fullscreenElement) {
-      document.exitFullscreen();
-    } else {
-      document.documentElement.requestFullscreen().catch(() => {});
-    }
-  }, []);
-
-  return { isFullscreen, toggle, isIOS, isPWA };
+// Initialize viewport monitor — sets up listeners and CSS vars
+if (typeof window !== 'undefined') {
+  initViewport();
 }
 
 // Close push notifications — all, or just for a specific session
@@ -59,20 +34,8 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const { theme, toggle: toggleTheme } = useTheme();
-  const { isFullscreen, toggle: toggleFullscreen, isIOS, isPWA } = useFullscreen();
+  const viewport = useViewport();
   const [showIOSHint, setShowIOSHint] = useState(false);
-  const [nativeKeyboardHeight, setNativeKeyboardHeight] = useState(0);
-
-  // Detect native mobile keyboard via visualViewport — shrink entire app container
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    function onResize() {
-      setNativeKeyboardHeight(Math.max(0, Math.round(window.innerHeight - vv!.height)));
-    }
-    vv.addEventListener('resize', onResize);
-    return () => vv.removeEventListener('resize', onResize);
-  }, []);
 
   // Left-edge swipe to open sidebar (mobile only)
   useEffect(() => {
@@ -109,12 +72,6 @@ export default function Home() {
       document.removeEventListener('touchend', onTouchEnd);
     };
   }, []);
-
-  // Memoized style for main area — avoids object allocation on every render
-  const mainAreaStyle = useMemo(() => ({
-    transform: nativeKeyboardHeight > 0 ? `translateY(-${nativeKeyboardHeight}px)` : 'translateY(0)',
-    transition: KEYBOARD_TRANSITION,
-  }), [nativeKeyboardHeight]);
 
   // Sync URL → session on mount
   useEffect(() => {
@@ -198,10 +155,6 @@ export default function Home() {
     <Sidebar
       theme={theme}
       toggleTheme={toggleTheme}
-      isFullscreen={isFullscreen}
-      toggleFullscreen={toggleFullscreen}
-      isIOS={isIOS}
-      isPWA={isPWA}
       showIOSHint={() => setShowIOSHint(true)}
       refreshKey={refreshKey}
       setRefreshKey={setRefreshKey}
@@ -233,7 +186,7 @@ export default function Home() {
           {/* Drawer panel */}
           <div
             className="absolute inset-y-0 left-0 w-64 bg-surface border-r border-border flex flex-col"
-            style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+            style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'var(--safe-bottom)' }}
             onClick={(e) => e.stopPropagation()}
           >
             {sidebar}
@@ -241,10 +194,10 @@ export default function Home() {
         </div>
       )}
 
-      {/* Main area — translateY shifts entire content up when native keyboard opens */}
+      {/* Main area — height driven by --vh CSS var (shrinks when keyboard opens) */}
       <div
         className="flex-1 flex flex-col min-w-0"
-        style={mainAreaStyle}
+        style={{ height: 'var(--vh, 100dvh)' }}
       >
         {/* Mobile top bar — compact: hamburger + session name + actions */}
         <div className="flex items-center bg-surface border-b border-border shrink-0 md:hidden" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
@@ -299,7 +252,6 @@ export default function Home() {
               session={name}
               visible={name === activeTab}
               theme={theme}
-              nativeKeyboardHeight={nativeKeyboardHeight}
               onDisconnect={() => detachSession(name)}
             />
           ))
@@ -347,16 +299,16 @@ export default function Home() {
         >
           <div className="absolute inset-0 bg-black/50" />
           <div
-            className="relative bg-surface border border-border rounded-xl p-4 max-w-sm w-full mb-8 text-center"
+            className="relative bg-surface rounded-xl p-4 max-w-sm text-center border border-border shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-sm font-medium mb-2">Fullscreen on iOS</p>
-            <p className="text-sm text-secondary mb-3">
-              Tap the share button, then &ldquo;Add to Home Screen&rdquo; to open without browser chrome.
+            <p className="text-sm font-medium mb-2">Add to Home Screen</p>
+            <p className="text-xs text-muted mb-3">
+              Tap the share button <span className="inline-block align-middle">&#x2191;</span> in Safari, then &quot;Add to Home Screen&quot; for a fullscreen experience.
             </p>
             <button
               onClick={() => setShowIOSHint(false)}
-              className="px-4 py-2 bg-surface-hover rounded-md text-sm transition-colors"
+              className="px-4 py-1.5 bg-surface-hover rounded text-xs font-medium"
             >
               Got it
             </button>
