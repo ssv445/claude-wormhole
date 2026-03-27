@@ -42,6 +42,9 @@ export function PushRegistrar() {
             body: JSON.stringify(existing.toJSON()),
           }).catch(() => {});
           setState('subscribed');
+        } else if (localStorage.getItem('push-dismissed')) {
+          // User previously dismissed the prompt — don't show again
+          setState('denied');
         } else {
           setState('prompt');
         }
@@ -100,6 +103,13 @@ export function PushRegistrar() {
           className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded transition-colors shrink-0"
         >
           Enable
+        </button>
+        <button
+          onClick={() => { localStorage.setItem('push-dismissed', '1'); setState('denied'); }}
+          className="p-1 text-muted hover:text-primary transition-colors shrink-0"
+          title="Dismiss"
+        >
+          ✕
         </button>
       </div>
     </div>
