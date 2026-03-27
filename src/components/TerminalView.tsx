@@ -568,7 +568,7 @@ export function TerminalView({
       const isMobile = window.innerWidth < 768;
       const term = new Terminal({
         cursorBlink: true,
-        fontSize: isMobile ? 11 : 14,
+        fontSize: isMobile ? 12 : 14,
         fontFamily: '"JetBrains Mono NF", "JetBrains Mono", monospace',
         theme: XTERM_THEMES[theme],
         allowProposedApi: true,
@@ -978,7 +978,7 @@ export function TerminalView({
             {KEYBOARD_SECTIONS.map((section) => (
               <div key={section.title} className="flex flex-col gap-1">
                 {/* Section label */}
-                <div className="text-[10px] text-muted font-semibold uppercase tracking-wider px-1">
+                <div className="text-[11px] text-muted font-semibold uppercase tracking-wider px-1">
                   {section.title}
                 </div>
                 {/* Section keys */}

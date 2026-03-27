@@ -277,12 +277,12 @@ export function SessionList({
                 onClick={(e) => e.stopPropagation()}
               />
             ) : (
-              <span className="font-mono text-sm truncate">
+              <span className="font-mono text-[15px] md:text-sm truncate">
                 {s.name}
               </span>
             )}
           </div>
-          <div className="text-xs text-muted ml-3 truncate flex items-center gap-1.5">
+          <div className="text-[13px] md:text-xs text-muted ml-3 truncate flex items-center gap-1.5">
             {s.claudeState === 'busy' && (
               <span className="text-green-400" title="Working">working</span>
             )}
@@ -385,7 +385,7 @@ export function SessionList({
     <div className="space-y-2">
       {allGroups.map(group => (
         <div key={group.dir}>
-          <div className="flex items-center justify-between text-xs text-muted px-2 mb-1">
+          <div className="flex items-center justify-between text-[13px] md:text-xs text-muted px-2 mb-1">
             <span className="font-mono truncate">{shortDir(group.dir)}</span>
             {onNewInDir && (
               <button
