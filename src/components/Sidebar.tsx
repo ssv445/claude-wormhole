@@ -2,14 +2,12 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { SessionList } from '@/components/SessionList';
+import { useViewport } from '@/hooks/useViewport';
+import { toggleFullscreen } from '@/lib/viewport';
 
 interface SidebarProps {
   theme: string;
   toggleTheme: () => void;
-  isFullscreen: boolean;
-  toggleFullscreen: () => void;
-  isIOS: boolean;
-  isPWA: boolean;
   showIOSHint: () => void;
   refreshKey: number;
   setRefreshKey: (fn: (k: number) => number) => void;
@@ -25,10 +23,6 @@ interface SidebarProps {
 export function Sidebar({
   theme,
   toggleTheme,
-  isFullscreen,
-  toggleFullscreen,
-  isIOS,
-  isPWA,
   showIOSHint,
   refreshKey,
   setRefreshKey,
@@ -42,6 +36,7 @@ export function Sidebar({
 }: SidebarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { isIOS, isPWA, isFullscreen } = useViewport();
 
   // Close menu on outside click or Escape
   useEffect(() => {

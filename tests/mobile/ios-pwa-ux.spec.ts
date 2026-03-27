@@ -41,7 +41,8 @@ test.describe('iOS PWA UX', () => {
 
       const style = await drawer.getAttribute('style');
       expect(style).toContain('safe-area-inset-top');
-      expect(style).toContain('safe-area-inset-bottom');
+      // Drawer uses --safe-bottom CSS var or env() directly
+      expect(style).toMatch(/safe-area-inset-bottom|--safe-bottom/);
     });
 
     test('bottom bar has safe-area-inset-bottom bleed zone', async ({ page }, testInfo) => {
@@ -52,7 +53,7 @@ test.describe('iOS PWA UX', () => {
       // Two-zone layout: buttons row + safe area bleed div below.
       // The outer container (grandparent of Escape button) contains both.
       const outerBar = page.locator('button[title="Escape"]').locator('xpath=ancestor::div[contains(@class,"flex-col")]');
-      const bleedDiv = outerBar.locator('div[style*="safe-area-inset-bottom"]');
+      const bleedDiv = outerBar.locator('div[style*="--safe-bottom"]');
       await expect(bleedDiv).toBeAttached();
     });
 
@@ -67,7 +68,7 @@ test.describe('iOS PWA UX', () => {
       await expect(kbPanel).toBeVisible();
 
       // Two-zone: content above + safe area bleed div below
-      const bleedDiv = kbPanel.locator('div[style*="safe-area-inset-bottom"]');
+      const bleedDiv = kbPanel.locator('div[style*="--safe-bottom"]');
       await expect(bleedDiv).toBeAttached();
     });
   });

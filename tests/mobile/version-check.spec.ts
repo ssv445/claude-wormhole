@@ -134,7 +134,7 @@ test.describe('Build Version Check', () => {
     // The server-side handler (server.ts:176) logs them — tested implicitly.
   });
 
-  test('sidebar footer shows build version', async ({ page }, testInfo) => {
+  test('sidebar menu shows build version', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile-webkit', 'Mobile only');
 
     // Mock sessions API
@@ -148,11 +148,14 @@ test.describe('Build Version Check', () => {
     await expect(hamburger).toBeVisible({ timeout: 10_000 });
     await hamburger.click();
 
-    // The footer button contains 'b' + last 6 chars of the build version.
-    // Both desktop and mobile drawer render the sidebar, so scope to the visible mobile drawer.
-    const expectedLabel = `b${CLIENT_VERSION.slice(-6)}`; // 'babc123'
+    // Open the three-dot menu inside the sidebar drawer
     const drawer = page.locator('.fixed.inset-0.z-40');
-    const footer = drawer.locator(`button:has-text("${expectedLabel}")`);
-    await expect(footer).toBeVisible({ timeout: 5_000 });
+    const menuBtn = drawer.locator('button[title="Menu"]');
+    await menuBtn.click();
+
+    // Version is shown inside the dropdown menu
+    const expectedLabel = `b${CLIENT_VERSION.slice(-6)}`;
+    const versionText = drawer.locator(`text=${expectedLabel}`);
+    await expect(versionText).toBeVisible({ timeout: 5_000 });
   });
 });

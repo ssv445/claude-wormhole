@@ -128,13 +128,11 @@ export function TerminalView({
   session,
   visible,
   theme,
-  nativeKeyboardHeight = 0,
   onDisconnect,
 }: {
   session: string;
   visible: boolean;
   theme: Theme;
-  nativeKeyboardHeight?: number;
   onDisconnect: () => void;
 }) {
   const termRef = useRef<HTMLDivElement>(null);
@@ -436,17 +434,12 @@ export function TerminalView({
     }
   }, [keyboardVisible]);
 
-  // Track keyboard height in a ref so ResizeObserver can read it without re-subscribing
-  const nativeKbRef = useRef(nativeKeyboardHeight);
-  nativeKbRef.current = nativeKeyboardHeight;
-
-  // ResizeObserver on terminal container — fires on window resize, VK toggle
-  // Skips fit() when native keyboard is open to avoid Claude Code re-render
+  // ResizeObserver on terminal container — fires on window resize, keyboard toggle.
+  // Always refit so the terminal fills available space after keyboard close.
   useEffect(() => {
     const el = termRef.current;
     if (!el || !termReady) return;
     const ro = new ResizeObserver(() => {
-      if (nativeKbRef.current > 0) return; // keyboard open — skip resize
       requestAnimationFrame(() => fitAddonRef.current?.fit());
     });
     ro.observe(el);
@@ -998,7 +991,7 @@ export function TerminalView({
             ))}
           </div>
           {/* Safe area bleed — zero when keyboard open (home indicator hidden), full otherwise */}
-          <div style={{ height: nativeKeyboardHeight > 0 ? '0px' : 'calc(env(safe-area-inset-bottom) / 2)', backgroundColor: XTERM_THEMES[theme].background }} />
+          <div style={{ height: 'calc(var(--safe-bottom, 0px) / 2)', backgroundColor: XTERM_THEMES[theme].background }} />
         </div>
       )}
 
@@ -1046,7 +1039,7 @@ export function TerminalView({
             </div>
           </div>
           {/* Safe area bleed — zero when keyboard open (home indicator hidden), full otherwise */}
-          <div style={{ height: nativeKeyboardHeight > 0 ? '0px' : 'calc(env(safe-area-inset-bottom) / 2)', backgroundColor: XTERM_THEMES[theme].background }} />
+          <div style={{ height: 'calc(var(--safe-bottom, 0px) / 2)', backgroundColor: XTERM_THEMES[theme].background }} />
         </div>
       )}
 
@@ -1055,7 +1048,7 @@ export function TerminalView({
           Safe area padding keeps buttons above the home indicator; terminal bg makes bleed invisible. */}
       <div
         className="shrink-0 md:hidden"
-        style={{ paddingBottom: nativeKeyboardHeight > 0 ? '0px' : 'calc(env(safe-area-inset-bottom) / 2)', backgroundColor: XTERM_THEMES[theme].background }}
+        style={{ paddingBottom: 'calc(var(--safe-bottom, 0px) / 2)', backgroundColor: XTERM_THEMES[theme].background }}
       >
         {/* Visible bar — gray background with border */}
         <div className="bg-gray-900 border-t border-gray-700/50">
