@@ -83,6 +83,28 @@ wormhole service install       # Auto-start on login
 wormhole service logs          # Tail logs
 ```
 
+## iOS Simulator Testing (PWA)
+
+Test the app as a PWA in iOS Simulator using agent-browser with the iOS provider.
+
+```sh
+# List available simulators
+agent-browser -p ios device list
+
+# Open wormhole in iOS simulator Safari
+agent-browser -p ios --device "iPhone 17 Pro" open https://shyams-macbook-air.tailc2706e.ts.net:3100
+
+# Snapshot + interact
+agent-browser -p ios snapshot -i
+agent-browser -p ios click @e1
+agent-browser -p ios swipe up
+
+# Dogfood (exploratory QA) the app
+# Use /dogfood skill with agent-browser -p ios
+```
+
+Requires: Xcode, iOS Simulator, Appium with XCUITest driver, agent-browser (`npm i -g agent-browser`).
+
 ## Mobile Terminal Scrolling — Critical Architecture Notes
 
 ### Scrollback lives in tmux, NOT xterm.js
