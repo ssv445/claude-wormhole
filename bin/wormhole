@@ -329,6 +329,11 @@ cmd_cld() {
 
 cmd_notify() {
   # Reads hook event JSON from stdin, POSTs to /api/notify.
+  # Skip notifications from subagents — only the main session should notify.
+  if [ -n "${CLAUDE_CODE_AGENT_ID:-}" ]; then
+    exit 0
+  fi
+
   local input
   input=$(cat)
   local notification_type message title tmux_session type
