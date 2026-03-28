@@ -1,20 +1,16 @@
 # claude-wormhole
 
-Access your Claude Code sessions from any device. Phone, browser, laptop — same session, zero interruption.
-
-> **Why "wormhole"?** A wormhole connects two distant points instantly. claude-wormhole does the same — it connects you to your running Claude Code session from wherever you are, as if you never left your desk.
+Manage all your Claude Code sessions from a single browser window. Access them from your phone when you're away from your desk.
 
 [![Demo video](https://img.youtube.com/vi/il_hSer5Uyk/maxresdefault.jpg)](https://www.youtube.com/watch?v=il_hSer5Uyk)
 
 ## The Problem
 
-Claude Code blocks on user input. It runs a 10-minute task, hits a permission prompt, and waits. You're on the couch, in a meeting, or grabbing coffee. By the time you're back, you've lost 20 minutes on a 2-second approval.
-
-The root issue: sessions are tied to the terminal that spawned them. Close the tab, lose the session.
+You have Claude Code running across multiple projects. Each one is a separate terminal tab. When Claude needs input, you don't know which tab it's in. When you step away from your desk, those sessions are stuck.
 
 ## How It Works
 
-Sessions run in tmux on your Mac. You connect from whatever device is in front of you.
+Sessions run in tmux on your Mac. A web UI shows all of them in one place, with live status indicators so you know which ones need attention. Connect from any device on your Tailscale network.
 
 ```
 Phone (PWA)       ──┐
@@ -26,13 +22,12 @@ SSH (Terminus)    ──┘   private net  │   ├─ my-app (claude)  │
                                      └──────────────────────┘
 ```
 
-Start something on your desktop, approve a prompt from your phone, review the result on your laptop. Same session everywhere.
-
+- **Single window for all sessions** — see every Claude instance, grouped by project directory, with status dots showing which are working, waiting, or idle
+- **Mobile access via Tailscale** — approve a permission prompt from your phone, check on a long-running task, or start a new session. Installable as a PWA on iOS.
 - **tmux** keeps sessions alive independent of any client
-- **Next.js + xterm.js + WebSocket** serves a browser terminal that attaches to tmux sessions
-- **Tailscale** creates a private network between your devices — nothing exposed to the internet
-- **PWA** makes the terminal installable on iOS with no browser chrome
-- **Push notifications** alert you when Claude needs input or finishes a task
+- **Push notifications** alert you when Claude needs input
+- **Restart sessions** from the UI — exits Claude and resumes with the same conversation
+- **Copy mode** — right-click (desktop) or long-press (mobile) to select and copy terminal text
 
 ## Quick Start
 
@@ -54,7 +49,7 @@ wormhole status              # Check system health
 | `bin/env.sh` | Shared environment for all scripts |
 | `server.ts` | Custom server — node-pty + WebSocket pipes tmux I/O to xterm.js |
 | `src/` | Next.js app (session list, terminal view) |
-| `scripts/tmux.conf` | tmux config with resurrect + continuum for persistence |
+| `scripts/tmux.conf` | tmux config with resurrect + continuum |
 | `install.sh` | One-shot setup (prereqs, build, symlink, hooks, tailscale) |
 
 ## Docs
