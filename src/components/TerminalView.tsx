@@ -428,9 +428,17 @@ export function TerminalView({
     if (keyboardVisible && xtermRef.current) {
       xtermRef.current.blur();
     }
-    // Refit terminal to new container size
+    // Refit terminal to new container size.
+    // On keyboard open, also scroll to bottom so sparse terminals don't lose
+    // the input line behind the top bar. Skip on close to preserve scroll position
+    // (user may be in tmux copy-mode).
     if (fitAddonRef.current) {
-      requestAnimationFrame(() => fitAddonRef.current?.fit());
+      requestAnimationFrame(() => {
+        fitAddonRef.current?.fit();
+        if (keyboardVisible) {
+          xtermRef.current?.scrollToBottom();
+        }
+      });
     }
   }, [keyboardVisible]);
 
