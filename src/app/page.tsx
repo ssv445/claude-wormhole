@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { SessionList } from '@/components/SessionList';
 import { TerminalView } from '@/components/TerminalView';
 import { NewSessionDialog } from '@/components/NewSessionDialog';
@@ -36,6 +36,46 @@ export default function Home() {
   const { theme, toggle: toggleTheme } = useTheme();
   const viewport = useViewport();
   const [showIOSHint, setShowIOSHint] = useState(false);
+
+  // Pull-to-refresh for mobile session list
+  const [pullDistance, setPullDistance] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const pullStartY = useRef(0);
+  const pullContainerRef = useRef<HTMLDivElement>(null);
+  const PULL_THRESHOLD = 60;
+
+  const onPullTouchStart = useCallback((e: React.TouchEvent) => {
+    const el = pullContainerRef.current;
+    // Only activate when scrolled to top
+    if (el && el.scrollTop <= 0) {
+      pullStartY.current = e.touches[0].clientY;
+    } else {
+      pullStartY.current = -1;
+    }
+  }, []);
+
+  const onPullTouchMove = useCallback((e: React.TouchEvent) => {
+    if (pullStartY.current < 0 || refreshing) return;
+    const dy = e.touches[0].clientY - pullStartY.current;
+    if (dy > 0) {
+      // Dampen the pull distance for a rubber-band feel
+      setPullDistance(Math.min(dy * 0.4, 80));
+    }
+  }, [refreshing]);
+
+  const onPullTouchEnd = useCallback(() => {
+    if (pullDistance >= PULL_THRESHOLD && !refreshing) {
+      setRefreshing(true);
+      setRefreshKey((k) => k + 1);
+      // Hold the spinner briefly so the user sees it
+      setTimeout(() => {
+        setRefreshing(false);
+        setPullDistance(0);
+      }, 600);
+    } else {
+      setPullDistance(0);
+    }
+  }, [pullDistance, refreshing]);
 
   // Left-edge swipe to open sidebar (mobile only)
   useEffect(() => {
@@ -256,7 +296,28 @@ export default function Home() {
             />
           ))
         ) : (
-          <div className="flex-1 overflow-y-auto p-4 md:flex md:items-center md:justify-center">
+          <div
+            ref={pullContainerRef}
+            className="flex-1 overflow-y-auto p-4 md:flex md:items-center md:justify-center"
+            onTouchStart={onPullTouchStart}
+            onTouchMove={onPullTouchMove}
+            onTouchEnd={onPullTouchEnd}
+          >
+            {/* Pull-to-refresh indicator (mobile only) */}
+            {pullDistance > 0 && (
+              <div
+                className="flex justify-center md:hidden"
+                style={{ height: pullDistance, transition: refreshing ? 'none' : 'height 0.1s' }}
+              >
+                <svg
+                  className={`w-5 h-5 text-muted ${refreshing ? 'animate-spin' : ''}`}
+                  style={{ opacity: Math.min(pullDistance / PULL_THRESHOLD, 1) }}
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </div>
+            )}
             <div className="max-w-md mx-auto md:text-center">
               <p className="text-muted text-sm hidden md:block">Select a session from the sidebar to attach.</p>
               {/* Mobile: show inline session list when no tabs open */}

@@ -155,6 +155,15 @@ export function TerminalView({
   const [versionStale, setVersionStale] = useState(false);
   const serverVersionRef = useRef<string | null>(null);
 
+  // Toast notification (replaces alert() which blocks iOS event loop)
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), 3000);
+  }, []);
+
   // Voice input + compose overlay state
   const [isListening, setIsListening] = useState(false);
   const [showCompose, setShowCompose] = useState(false);
@@ -239,7 +248,7 @@ export function TerminalView({
     if (!file) return;
     // 10MB limit
     if (file.size > 10 * 1024 * 1024) {
-      alert('File too large (max 10MB)');
+      showToast('File too large (max 10MB)');
       return;
     }
     const reader = new FileReader();
@@ -284,7 +293,7 @@ export function TerminalView({
     try {
       const result = await navigator.permissions.query({ name: 'microphone' as PermissionName });
       if (result.state === 'denied') {
-        alert('Microphone permission denied. Enable it in browser settings.');
+        showToast('Microphone permission denied. Enable it in browser settings.');
         return;
       }
     } catch {
@@ -296,7 +305,7 @@ export function TerminalView({
       // Permission granted — stop the stream, we only needed the prompt
       stream.getTracks().forEach(t => t.stop());
     } catch {
-      alert('Microphone access is required for voice input.');
+      showToast('Microphone access is required for voice input.');
       return;
     }
 
@@ -343,7 +352,7 @@ export function TerminalView({
       setIsListening(false);
       speechRef.current = null;
       if (ev.error === 'not-allowed') {
-        alert('Microphone permission denied. Enable it in browser settings.');
+        showToast('Microphone permission denied. Enable it in browser settings.');
       }
     };
 
@@ -956,6 +965,13 @@ export function TerminalView({
             </div>
           </div>
         )}
+
+        {/* Toast notification — non-blocking replacement for alert() */}
+        {toast && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 px-4 py-2 bg-surface border border-border rounded-lg shadow-lg text-sm text-primary max-w-[90%] text-center">
+            {toast}
+          </div>
+        )}
       </div>
 
       {/* Virtual keyboard - Mobile only */}
@@ -1180,17 +1196,18 @@ export function TerminalView({
             )}
           </svg>
         </button>
-        {/* Exit copy-mode — sends 'q' to tmux to return to input mode */}
+        {/* Exit copy-mode — sends 'q' to tmux to return to input mode.
+             Styled as a labeled pill so users can find it when stuck in copy mode. */}
         <button
           onPointerDown={onTapDown}
           onPointerUp={() => { if (isTap()) sendKey('q'); }}
-          className="min-w-[40px] h-9 shrink-0 flex items-center justify-center text-gray-300 active:text-white active:scale-95 transition-transform"
+          className="h-7 px-2.5 shrink-0 flex items-center gap-1 rounded-full bg-yellow-500/20 text-yellow-300 text-xs font-medium active:bg-yellow-500/40 active:scale-95 transition-all"
           title="Exit copy mode (back to input)"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-            <path d="M12 4v16" />
-            <path d="M8 4h8M8 20h8" />
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+            <path d="M18 6L6 18M6 6l12 12" />
           </svg>
+          Exit
         </button>
           </div>
         </div>
