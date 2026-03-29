@@ -14,7 +14,7 @@ function validateSessionName(name: string): string {
 }
 
 // Claude Code state driven by hooks (UserPromptSubmit, Stop, Notification, etc.)
-export type ClaudeState = 'busy' | 'waiting' | 'idle' | 'error' | null;
+export type ClaudeState = 'busy' | 'permission' | 'waiting' | 'idle' | 'error' | null;
 
 export interface SessionInfo {
   name: string;
@@ -73,8 +73,10 @@ export async function listSessionsWithInfo(): Promise<SessionInfo[]> {
       // State files are written by the notify hook on UserPromptSubmit, Stop, etc.
       try {
         const state = readFileSync(`/tmp/wormhole-claude-state-${session.name}`, 'utf8').trim();
-        if (state === 'busy' || state === 'permission') {
+        if (state === 'busy') {
           session.claudeState = 'busy';
+        } else if (state === 'permission') {
+          session.claudeState = 'permission';
         } else if (state === 'waiting') {
           session.claudeState = 'waiting';
         } else if (state === 'idle') {
