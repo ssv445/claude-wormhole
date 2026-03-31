@@ -604,12 +604,19 @@ export function TerminalView({
       // Falls back to DOM renderer if WebGL2 is unavailable (older devices).
       try {
         const { WebglAddon } = await import('@xterm/addon-webgl');
-        const webglAddon = new WebglAddon();
-        webglAddon.onContextLoss(() => {
-          // GPU context lost (system sleep, driver crash) — dispose and let DOM renderer take over
-          webglAddon.dispose();
-        });
-        term.loadAddon(webglAddon);
+        function attachWebgl() {
+          const addon = new WebglAddon();
+          addon.onContextLoss(() => {
+            // GPU context lost (system sleep, iOS background, driver crash).
+            // Dispose the dead addon and re-attach a fresh one — without this,
+            // the renderer is null and all refresh calls silently no-op,
+            // causing the terminal to freeze permanently.
+            addon.dispose();
+            try { attachWebgl(); } catch { /* fall back to DOM renderer */ }
+          });
+          term.loadAddon(addon);
+        }
+        attachWebgl();
       } catch {
         // WebGL2 not supported — DOM renderer is the automatic fallback
       }
@@ -804,7 +811,12 @@ export function TerminalView({
           // Refit terminal — dimensions may have changed while backgrounded (e.g. device switch, rotation).
           // This bypasses the ResizeObserver keyboard guard intentionally: a one-time fit on visibility
           // change is safe even with keyboard open, unlike continuous ResizeObserver firings.
-          requestAnimationFrame(() => fitAddonRef.current?.fit());
+          // Also force a full refresh — the browser throttles rAF while backgrounded,
+          // so any data that arrived while hidden may not have rendered.
+          requestAnimationFrame(() => {
+            fitAddonRef.current?.fit();
+            term.refresh(0, term.rows - 1);
+          });
         }
       }
       // Track last known dimensions to avoid spurious resize on every window.focus (e.g. DevTools toggle)
