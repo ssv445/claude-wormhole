@@ -142,6 +142,11 @@ export async function restartClaudeSession(name: string): Promise<void> {
     throw new Error(`No Claude session ID cached for "${name}". Has the session run recently?`);
   }
 
+  // Validate session ID format to prevent command injection via tampered /tmp/ files
+  if (!/^[a-zA-Z0-9_-]+$/.test(claudeSessionId)) {
+    throw new Error(`Invalid Claude session ID format for "${name}"`);
+  }
+
   // Send /exit + Enter to quit the running Claude Code process
   await execFileAsync('tmux', ['send-keys', '-t', name, '/exit', 'Enter']);
 

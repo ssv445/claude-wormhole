@@ -22,6 +22,17 @@ export const SESSIONS_FILE = join(WORMHOLE_DIR, 'sessions.json');
 const STALE_DAYS = 7;
 const STALE_SECONDS = STALE_DAYS * 24 * 60 * 60;
 const SAFE_NAME_RE = /^[a-zA-Z0-9_-]+$/;
+export { STALE_SECONDS };
+
+// Serialize all read-modify-write cycles through a promise queue to prevent
+// lost-update races when concurrent API requests touch sessions.json.
+let writeQueue = Promise.resolve();
+function serialized<T>(fn: () => T | Promise<T>): Promise<T> {
+  const next = writeQueue.then(fn);
+  // Chain but don't propagate errors to subsequent queued operations
+  writeQueue = next.then(() => {}, () => {});
+  return next;
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -70,96 +81,93 @@ export function writeSavedSessions(sessions: Record<string, SavedSession>): void
 // Sync (called every 60 s by server.ts)
 // ---------------------------------------------------------------------------
 
-export async function syncSessionsFile(): Promise<void> {
-  // 1. Get live tmux sessions
-  let liveNames: string[] = [];
-  try {
-    const { stdout } = await execFileAsync('tmux', [
-      'list-sessions',
-      '-F',
-      '#{session_name}',
-    ]);
-    liveNames = stdout.trim().split('\n').filter(Boolean);
-  } catch {
-    // tmux not running — no live sessions
-  }
-
-  const liveSet = new Set(liveNames);
-
-  // 2. Read existing persisted sessions
-  const sessions = readSavedSessions();
-  const now = Math.floor(Date.now() / 1000);
-
-  // 3. Upsert each live session
-  for (const name of liveNames) {
-    // Get current pane working directory
-    let workingDir = sessions[name]?.workingDir ?? '';
+export function syncSessionsFile(): Promise<void> {
+  return serialized(async () => {
+    // 1. Get all live tmux sessions with pane paths in a single call
+    const liveEntries: Array<{ name: string; workingDir: string }> = [];
     try {
       const { stdout } = await execFileAsync('tmux', [
-        'display-message',
-        '-p',
-        '-t',
-        name,
-        '#{pane_current_path}',
+        'list-sessions',
+        '-F',
+        '#{session_name}|#{pane_current_path}',
       ]);
-      workingDir = stdout.trim();
+      for (const line of stdout.trim().split('\n').filter(Boolean)) {
+        const sep = line.indexOf('|');
+        liveEntries.push({
+          name: line.slice(0, sep),
+          workingDir: line.slice(sep + 1),
+        });
+      }
     } catch {
-      // keep existing workingDir on error
+      // tmux not running — no live sessions
     }
 
-    // Read claudeSessionId from the statusline-hook-written temp file
-    let claudeSessionId: string | null = sessions[name]?.claudeSessionId ?? null;
-    try {
-      const id = readFileSync(`/tmp/wormhole-claude-session-${name}`, 'utf8').trim();
-      if (id) claudeSessionId = id;
-    } catch {
-      // no file yet — keep whatever was persisted
+    const liveSet = new Set(liveEntries.map((e) => e.name));
+
+    // 2. Read existing persisted sessions
+    const sessions = readSavedSessions();
+    const now = Math.floor(Date.now() / 1000);
+
+    // 3. Upsert each live session
+    for (const { name, workingDir: panePath } of liveEntries) {
+      // Read claudeSessionId from the statusline-hook-written temp file
+      let claudeSessionId: string | null = sessions[name]?.claudeSessionId ?? null;
+      try {
+        const id = readFileSync(`/tmp/wormhole-claude-session-${name}`, 'utf8').trim();
+        if (id) claudeSessionId = id;
+      } catch {
+        // no file yet — keep whatever was persisted
+      }
+
+      sessions[name] = {
+        workingDir: panePath || sessions[name]?.workingDir || '',
+        claudeSessionId,
+        lastSeen: now,
+      };
     }
 
-    sessions[name] = {
-      workingDir,
-      claudeSessionId,
-      lastSeen: now,
-    };
-  }
-
-  // 4. Prune entries that are stale AND not currently live
-  for (const [name, session] of Object.entries(sessions)) {
-    if (!liveSet.has(name) && now - session.lastSeen > STALE_SECONDS) {
-      delete sessions[name];
+    // 4. Prune entries that are stale AND not currently live
+    for (const [name, session] of Object.entries(sessions)) {
+      if (!liveSet.has(name) && now - session.lastSeen > STALE_SECONDS) {
+        delete sessions[name];
+      }
     }
-  }
 
-  // 5. Persist
-  writeSavedSessions(sessions);
+    // 5. Persist
+    writeSavedSessions(sessions);
+  });
 }
 
 // ---------------------------------------------------------------------------
 // Remove / Rename
 // ---------------------------------------------------------------------------
 
-export function removeSavedSession(name: string): void {
-  const sessions = readSavedSessions();
-  delete sessions[name];
-  writeSavedSessions(sessions);
+export function removeSavedSession(name: string): Promise<void> {
+  return serialized(() => {
+    const sessions = readSavedSessions();
+    delete sessions[name];
+    writeSavedSessions(sessions);
 
-  // Clean up associated temp files (best-effort)
-  for (const suffix of ['session', 'state']) {
-    try {
-      unlinkSync(`/tmp/wormhole-claude-${suffix}-${name}`);
-    } catch {
-      // file may not exist — ignore
+    // Clean up associated temp files (best-effort)
+    for (const suffix of ['session', 'state']) {
+      try {
+        unlinkSync(`/tmp/wormhole-claude-${suffix}-${name}`);
+      } catch {
+        // file may not exist — ignore
+      }
     }
-  }
+  });
 }
 
-export function renameSavedSession(oldName: string, newName: string): void {
-  const sessions = readSavedSessions();
-  if (!(oldName in sessions)) return;
+export function renameSavedSession(oldName: string, newName: string): Promise<void> {
+  return serialized(() => {
+    const sessions = readSavedSessions();
+    if (!(oldName in sessions)) return;
 
-  sessions[newName] = sessions[oldName];
-  delete sessions[oldName];
-  writeSavedSessions(sessions);
+    sessions[newName] = sessions[oldName];
+    delete sessions[oldName];
+    writeSavedSessions(sessions);
+  });
 }
 
 // ---------------------------------------------------------------------------

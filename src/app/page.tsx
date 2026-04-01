@@ -122,7 +122,9 @@ export default function Home() {
     // Fetch sessions and auto-open saved ones
     fetch('/api/sessions')
       .then((r) => r.json())
-      .then((sessions: Array<{ name: string; saved?: boolean; restoring?: boolean }>) => {
+      .then((data: unknown) => {
+        if (!Array.isArray(data)) return;
+        const sessions = data as Array<{ name: string; saved?: boolean; restoring?: boolean }>;
         const savedNames = sessions
           .filter((s) => s.saved)
           .map((s) => s.name);

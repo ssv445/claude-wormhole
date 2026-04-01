@@ -1,55 +1,54 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listSessionsWithInfo, newSession, killSession, renameSession, restartClaudeSession } from '@/lib/tmux';
-import { removeSavedSession, renameSavedSession, readSavedSessions, resurrectSession } from '@/lib/sessions';
+import { removeSavedSession, renameSavedSession, readSavedSessions, resurrectSession, STALE_SECONDS } from '@/lib/sessions';
 
 export async function GET() {
-  const [sessions, saved] = await Promise.all([
-    listSessionsWithInfo(),
-    Promise.resolve(readSavedSessions()),
-  ]);
+  try {
+    const [sessions, saved] = await Promise.all([
+      listSessionsWithInfo(),
+      Promise.resolve(readSavedSessions()),
+    ]);
 
-  const liveNames = new Set(sessions.map((s) => s.name));
+    const liveNames = new Set(sessions.map((s) => s.name));
 
-  // Mark live sessions that are in the saved file
-  for (const s of sessions) {
-    if (saved[s.name]) {
-      s.saved = true;
+    // Mark live sessions that are in the saved file
+    for (const s of sessions) {
+      if (saved[s.name]) {
+        s.saved = true;
+      }
     }
+
+    // Resurrect dead sessions that are in the saved file.
+    // Fire-and-forget — don't block the response on resurrection completing.
+    const now = Math.floor(Date.now() / 1000);
+
+    for (const [name, entry] of Object.entries(saved)) {
+      if (liveNames.has(name)) continue;
+      if (entry.lastSeen < now - STALE_SECONDS) continue;
+
+      // Launch resurrection in background (mutex prevents double-spawn)
+      resurrectSession(name, entry).catch(() => {});
+
+      // Include in response immediately so frontend opens the tab
+      sessions.push({
+        name,
+        windows: 1,
+        attached: false,
+        created: new Date().toLocaleString(),
+        workingDir: entry.workingDir,
+        lastActivity: 'just now',
+        claudeState: null,
+        saved: true,
+        restored: true,
+        restoring: !!entry.claudeSessionId,
+      });
+    }
+
+    return NextResponse.json(sessions);
+  } catch {
+    // Graceful fallback — return empty list so frontend doesn't crash
+    return NextResponse.json([]);
   }
-
-  // Resurrect dead sessions that are in the saved file
-  const resurrectPromises: Promise<void>[] = [];
-  const now = Math.floor(Date.now() / 1000);
-  const STALE_SECONDS = 7 * 24 * 60 * 60;
-
-  for (const [name, entry] of Object.entries(saved)) {
-    if (liveNames.has(name)) continue;
-    // Skip stale entries
-    if (entry.lastSeen < now - STALE_SECONDS) continue;
-
-    resurrectPromises.push(
-      resurrectSession(name, entry).then((ok) => {
-        if (ok) {
-          sessions.push({
-            name,
-            windows: 1,
-            attached: false,
-            created: new Date().toLocaleString(),
-            workingDir: entry.workingDir,
-            lastActivity: 'just now',
-            claudeState: null,
-            saved: true,
-            restored: true,
-            restoring: !!entry.claudeSessionId,
-          });
-        }
-      })
-    );
-  }
-
-  await Promise.all(resurrectPromises);
-
-  return NextResponse.json(sessions);
 }
 
 export async function POST(req: NextRequest) {
@@ -92,7 +91,7 @@ export async function PATCH(req: NextRequest) {
   }
   try {
     await renameSession(oldName, newName);
-    renameSavedSession(oldName, newName);
+    await renameSavedSession(oldName, newName);
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Failed to rename session';
@@ -107,7 +106,7 @@ export async function DELETE(req: NextRequest) {
   }
   try {
     await killSession(name);
-    removeSavedSession(name);
+    await removeSavedSession(name);
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Failed to kill session';
