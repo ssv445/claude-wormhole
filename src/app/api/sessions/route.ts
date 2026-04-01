@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listSessionsWithInfo, newSession, killSession, renameSession, restartClaudeSession } from '@/lib/tmux';
+import { removeSavedSession, renameSavedSession } from '@/lib/sessions';
 
 export async function GET() {
   const sessions = await listSessionsWithInfo();
@@ -46,6 +47,7 @@ export async function PATCH(req: NextRequest) {
   }
   try {
     await renameSession(oldName, newName);
+    renameSavedSession(oldName, newName);
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Failed to rename session';
@@ -60,6 +62,7 @@ export async function DELETE(req: NextRequest) {
   }
   try {
     await killSession(name);
+    removeSavedSession(name);
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Failed to kill session';
