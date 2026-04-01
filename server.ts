@@ -7,6 +7,7 @@ import { randomBytes } from 'crypto';
 import { execFile, execFileSync } from 'child_process';
 import { promisify } from 'util';
 import next from 'next';
+import { syncSessionsFile } from './src/lib/sessions';
 import { WebSocketServer, WebSocket } from 'ws';
 
 const dev = process.env.NODE_ENV !== 'production';
@@ -247,5 +248,15 @@ app.prepare().then(() => {
 
   server.listen(port, hostname, () => {
     console.log(`> claude-wormhole ready on http://${hostname}:${port}`);
+    // Sync active sessions to ~/.wormhole/sessions.json every 60s.
+    // Run immediately on startup to capture current state, then repeat.
+    syncSessionsFile().catch((err: unknown) => {
+      console.error('[sync] initial sync failed:', err instanceof Error ? err.message : err);
+    });
+    setInterval(() => {
+      syncSessionsFile().catch((err: unknown) => {
+        console.error('[sync] failed:', err instanceof Error ? err.message : err);
+      });
+    }, 60_000);
   });
 });

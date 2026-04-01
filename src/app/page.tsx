@@ -36,6 +36,7 @@ export default function Home() {
   const { theme, toggle: toggleTheme } = useTheme();
   const viewport = useViewport();
   const [showIOSHint, setShowIOSHint] = useState(false);
+  const [restoringSet, setRestoringSet] = useState<Set<string>>(new Set());
 
   // Pull-to-refresh for mobile session list
   const [pullDistance, setPullDistance] = useState(0);
@@ -113,14 +114,51 @@ export default function Home() {
     };
   }, []);
 
-  // Sync URL → session on mount
+  // Restore saved sessions on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const session = params.get('session');
-    if (session) {
-      setOpenTabs((prev) => (prev.includes(session) ? prev : [...prev, session]));
-      setActiveTab(session);
-    }
+    const urlSession = params.get('session');
+
+    // Fetch sessions and auto-open saved ones
+    fetch('/api/sessions')
+      .then((r) => r.json())
+      .then((data: unknown) => {
+        if (!Array.isArray(data)) return;
+        const sessions = data as Array<{ name: string; saved?: boolean; restoring?: boolean }>;
+        const savedNames = sessions
+          .filter((s) => s.saved)
+          .map((s) => s.name);
+
+        const restoringNames = sessions
+          .filter((s) => s.restoring)
+          .map((s) => s.name);
+        setRestoringSet(new Set(restoringNames));
+
+        if (savedNames.length > 0) {
+          setOpenTabs(savedNames);
+          // URL param takes precedence for active tab
+          if (urlSession && savedNames.includes(urlSession)) {
+            setActiveTab(urlSession);
+          } else if (urlSession) {
+            // URL session not in saved set — add it
+            setOpenTabs((prev) => prev.includes(urlSession) ? prev : [...prev, urlSession]);
+            setActiveTab(urlSession);
+          } else {
+            setActiveTab(savedNames[0]);
+          }
+        } else if (urlSession) {
+          // No saved sessions, but URL has a session param
+          setOpenTabs((prev) => prev.includes(urlSession) ? prev : [...prev, urlSession]);
+          setActiveTab(urlSession);
+        }
+      })
+      .catch(() => {
+        // Fallback: just use URL param like before
+        if (urlSession) {
+          setOpenTabs((prev) => prev.includes(urlSession) ? prev : [...prev, urlSession]);
+          setActiveTab(urlSession);
+        }
+      });
   }, []);
 
   // Sync session → URL when activeTab changes
@@ -292,6 +330,7 @@ export default function Home() {
               session={name}
               visible={name === activeTab}
               theme={theme}
+              restoring={restoringSet.has(name)}
               onDisconnect={() => detachSession(name)}
             />
           ))

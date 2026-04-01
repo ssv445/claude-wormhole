@@ -24,6 +24,9 @@ export interface SessionInfo {
   workingDir: string;
   lastActivity: string;
   claudeState: ClaudeState;
+  saved?: boolean;      // was in sessions.json (auto-open on frontend)
+  restored?: boolean;   // was dead, just resurrected
+  restoring?: boolean;  // Claude Code is starting up
 }
 
 export async function listSessionsWithInfo(): Promise<SessionInfo[]> {
@@ -137,6 +140,11 @@ export async function restartClaudeSession(name: string): Promise<void> {
   }
   if (!claudeSessionId) {
     throw new Error(`No Claude session ID cached for "${name}". Has the session run recently?`);
+  }
+
+  // Validate session ID format to prevent command injection via tampered /tmp/ files
+  if (!/^[a-zA-Z0-9_-]+$/.test(claudeSessionId)) {
+    throw new Error(`Invalid Claude session ID format for "${name}"`);
   }
 
   // Send /exit + Enter to quit the running Claude Code process

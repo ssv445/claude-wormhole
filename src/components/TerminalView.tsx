@@ -128,11 +128,13 @@ export function TerminalView({
   session,
   visible,
   theme,
+  restoring,
   onDisconnect,
 }: {
   session: string;
   visible: boolean;
   theme: Theme;
+  restoring?: boolean;
   onDisconnect: () => void;
 }) {
   const termRef = useRef<HTMLDivElement>(null);
@@ -232,6 +234,8 @@ export function TerminalView({
       openComposeForPaste();
     }
   }, [openComposeForPaste]);
+
+  const [waitingForSession, setWaitingForSession] = useState(!!restoring);
 
   // File attach: opens native file picker directly.
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -478,7 +482,42 @@ export function TerminalView({
     }
   }, [visible]);
 
+  // When restoring, poll until Claude Code is running before connecting WebSocket.
+  // Claude's statusline hook writes claudeState — wait for it to become non-null.
   useEffect(() => {
+    if (!restoring) return;
+    setWaitingForSession(true);
+
+    let cancelled = false;
+    const poll = async () => {
+      while (!cancelled) {
+        try {
+          const res = await fetch('/api/sessions');
+          const sessions: Array<{ name: string; claudeState: string | null }> = await res.json();
+          const found = sessions.find((s) => s.name === session);
+          // Session exists AND Claude has started (claudeState written by statusline hook)
+          if (found && found.claudeState) {
+            setWaitingForSession(false);
+            return;
+          }
+        } catch { /* retry */ }
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    };
+    poll();
+    // Timeout — connect anyway after 60s (Claude may not have started yet, but
+    // the tmux session is there so the WebSocket can still attach)
+    const timeout = setTimeout(() => {
+      cancelled = true;
+      setWaitingForSession(false);
+    }, 60_000);
+
+    return () => { cancelled = true; clearTimeout(timeout); };
+  }, [restoring, session]);
+
+  useEffect(() => {
+    if (waitingForSession) return;
+
     let disposed = false;
     intentionalCloseRef.current = false;
 
@@ -862,7 +901,7 @@ export function TerminalView({
     };
     // theme intentionally excluded — handled by separate effect
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session]);
+  }, [session, waitingForSession]);
 
   function handleMobileKey(key: string) {
     sendKey(key);
@@ -878,6 +917,14 @@ export function TerminalView({
         backgroundColor: XTERM_THEMES[theme].background,
       }}
     >
+      {waitingForSession && visible && (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin w-6 h-6 border-2 border-muted border-t-primary rounded-full mx-auto mb-3" />
+            <p className="text-sm text-muted">Restoring session...</p>
+          </div>
+        </div>
+      )}
       {/* Terminal + reconnect overlay */}
       <div
         className="flex-1 overflow-hidden relative"
