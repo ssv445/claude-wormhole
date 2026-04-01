@@ -24,6 +24,9 @@ export interface SessionInfo {
   workingDir: string;
   lastActivity: string;
   claudeState: ClaudeState;
+  saved?: boolean;      // was in sessions.json (auto-open on frontend)
+  restored?: boolean;   // was dead, just resurrected
+  restoring?: boolean;  // Claude Code is starting up
 }
 
 export async function listSessionsWithInfo(): Promise<SessionInfo[]> {

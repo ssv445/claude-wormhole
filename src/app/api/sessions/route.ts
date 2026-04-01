@@ -1,9 +1,54 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listSessionsWithInfo, newSession, killSession, renameSession, restartClaudeSession } from '@/lib/tmux';
-import { removeSavedSession, renameSavedSession } from '@/lib/sessions';
+import { removeSavedSession, renameSavedSession, readSavedSessions, resurrectSession } from '@/lib/sessions';
 
 export async function GET() {
-  const sessions = await listSessionsWithInfo();
+  const [sessions, saved] = await Promise.all([
+    listSessionsWithInfo(),
+    Promise.resolve(readSavedSessions()),
+  ]);
+
+  const liveNames = new Set(sessions.map((s) => s.name));
+
+  // Mark live sessions that are in the saved file
+  for (const s of sessions) {
+    if (saved[s.name]) {
+      s.saved = true;
+    }
+  }
+
+  // Resurrect dead sessions that are in the saved file
+  const resurrectPromises: Promise<void>[] = [];
+  const now = Math.floor(Date.now() / 1000);
+  const STALE_SECONDS = 7 * 24 * 60 * 60;
+
+  for (const [name, entry] of Object.entries(saved)) {
+    if (liveNames.has(name)) continue;
+    // Skip stale entries
+    if (entry.lastSeen < now - STALE_SECONDS) continue;
+
+    resurrectPromises.push(
+      resurrectSession(name, entry).then((ok) => {
+        if (ok) {
+          sessions.push({
+            name,
+            windows: 1,
+            attached: false,
+            created: new Date().toLocaleString(),
+            workingDir: entry.workingDir,
+            lastActivity: 'just now',
+            claudeState: null,
+            saved: true,
+            restored: true,
+            restoring: !!entry.claudeSessionId,
+          });
+        }
+      })
+    );
+  }
+
+  await Promise.all(resurrectPromises);
+
   return NextResponse.json(sessions);
 }
 
