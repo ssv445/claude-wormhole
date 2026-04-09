@@ -8,6 +8,7 @@ interface SessionInfo {
   windows: number;
   attached: boolean;
   created: string;
+  createdAt: number;   // epoch seconds — used for sorting newest-first
   workingDir: string;
   lastActivity: string;
   claudeState: 'busy' | 'permission' | 'waiting' | 'idle' | 'error' | null;
@@ -98,32 +99,13 @@ export function SessionList({
     return workingDir.replace(/^\$HOME/, '~');
   };
 
-  // Helper to parse activity time for sorting
-  const parseActivityTime = (activity: string): Date => {
-    const now = Date.now();
-    const match = activity.match(/^(\d+)([smhd])/);
-
-    if (activity === 'just now') return new Date(now);
-    if (!match) return new Date(0);
-
-    const value = parseInt(match[1]);
-    const unit = match[2];
-
-    const multipliers: Record<string, number> = {
-      's': 1000,
-      'm': 60 * 1000,
-      'h': 60 * 60 * 1000,
-      'd': 24 * 60 * 60 * 1000
-    };
-
-    return new Date(now - value * (multipliers[unit] || 0));
-  };
-
-  // Helper to group sessions by directory
+  // Helper to group sessions by directory. Within a group, newest sessions
+  // come first (highest createdAt). Folders are sorted by path — stable
+  // alphabetical order regardless of recent activity, so the list doesn't
+  // reshuffle on you as sessions tick over.
   interface DirectoryGroup {
     dir: string;
     sessions: SessionInfo[];
-    mostRecentActivity: Date;
   }
 
   const groupByDirectory = (sessionsList: SessionInfo[]): DirectoryGroup[] => {
@@ -131,7 +113,6 @@ export function SessionList({
 
     sessionsList.forEach(session => {
       const dir = normalizeWorkingDir(session.workingDir);
-
       if (!groups.has(dir)) {
         groups.set(dir, []);
       }
@@ -139,30 +120,26 @@ export function SessionList({
     });
 
     const result: DirectoryGroup[] = [];
-
     groups.forEach((groupSessions, dir) => {
-      const sortedSessions = [...groupSessions].sort((a, b) =>
-        parseActivityTime(b.lastActivity).getTime() - parseActivityTime(a.lastActivity).getTime()
+      const sortedSessions = [...groupSessions].sort(
+        (a, b) => b.createdAt - a.createdAt,
       );
-
-      const mostRecent = groupSessions.reduce((latest, session) => {
-        const sessionTime = parseActivityTime(session.lastActivity);
-        return sessionTime > latest ? sessionTime : latest;
-      }, new Date(0));
-
-      result.push({
-        dir,
-        sessions: sortedSessions,
-        mostRecentActivity: mostRecent
-      });
+      result.push({ dir, sessions: sortedSessions });
     });
 
     return result;
   };
 
-  // Single unified list grouped by directory, sorted by recent activity
-  const allGroups = groupByDirectory(sessions);
-  allGroups.sort((a, b) => b.mostRecentActivity.getTime() - a.mostRecentActivity.getTime());
+  // Show only ATTACHED sessions (the ones in openTabs). Everything else is
+  // detached and lives in the "Open session..." dropdown, not here.
+  const attachedSessions = sessions.filter((s) => openTabs.includes(s.name));
+
+  // Grouped by folder, alphabetical by folder path (case-insensitive), with
+  // newest sessions first within each folder.
+  const allGroups = groupByDirectory(attachedSessions);
+  allGroups.sort((a, b) =>
+    a.dir.toLowerCase().localeCompare(b.dir.toLowerCase()),
+  );
 
   // Strip longest common directory prefix across all groups for shorter display
   const allDirs = allGroups.map(g => g.dir);

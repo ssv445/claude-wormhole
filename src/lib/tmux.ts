@@ -20,7 +20,8 @@ export interface SessionInfo {
   name: string;
   windows: number;
   attached: boolean;
-  created: string;
+  created: string;      // display-friendly localized string (kept for UI tooltip use)
+  createdAt: number;    // epoch seconds — used for sorting newest-first in the sidebar
   workingDir: string;
   lastActivity: string;
   claudeState: ClaudeState;
@@ -44,11 +45,13 @@ export async function listSessionsWithInfo(): Promise<SessionInfo[]> {
       .map((line) => {
         const [name, windows, attached, created, sessionPath, activity] =
           line.split('|');
+        const createdEpoch = parseInt(created, 10);
         return {
           name,
           windows: parseInt(windows, 10),
           attached: attached === '1',
-          created: new Date(parseInt(created, 10) * 1000).toLocaleString(),
+          created: new Date(createdEpoch * 1000).toLocaleString(),
+          createdAt: createdEpoch,
           workingDir: sessionPath || '',
           lastActivity: activity
             ? formatLastActivity(parseInt(activity, 10))

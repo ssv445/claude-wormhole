@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listSessionsWithInfo, newSession, killSession, renameSession, restartClaudeSession } from '@/lib/tmux';
-import { removeSavedSession, renameSavedSession, readSavedSessions, resurrectSession, STALE_SECONDS } from '@/lib/sessions';
+import { addSavedSession, removeSavedSession, renameSavedSession, readSavedSessions, resurrectSession, STALE_SECONDS } from '@/lib/sessions';
 
 export async function GET() {
   try {
@@ -35,6 +35,7 @@ export async function GET() {
         windows: 1,
         attached: false,
         created: new Date().toLocaleString(),
+        createdAt: now, // resurrected — treat "now" as the new creation time
         workingDir: entry.workingDir,
         lastActivity: 'just now',
         claudeState: null,
@@ -79,6 +80,41 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ ok: true });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to restart session';
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
+  }
+
+  // Attach: add the session to sessions.json so it's restored on next reload.
+  // The tmux session must already exist. This is called by the UI when the
+  // user explicitly opens a detached session via the "Open session..." menu.
+  if (body.action === 'attach') {
+    const { name } = body;
+    if (!name || typeof name !== 'string') {
+      return NextResponse.json({ error: 'name is required' }, { status: 400 });
+    }
+    try {
+      await addSavedSession(name);
+      return NextResponse.json({ ok: true });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to attach session';
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
+  }
+
+  // Detach: remove the session from sessions.json so it's NOT restored on
+  // next reload. The tmux session itself keeps running — detach is a view
+  // concept only. Called by the UI when the user picks "Detach" from a
+  // session's menu.
+  if (body.action === 'detach') {
+    const { name } = body;
+    if (!name || typeof name !== 'string') {
+      return NextResponse.json({ error: 'name is required' }, { status: 400 });
+    }
+    try {
+      await removeSavedSession(name);
+      return NextResponse.json({ ok: true });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to detach session';
       return NextResponse.json({ error: msg }, { status: 500 });
     }
   }

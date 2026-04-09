@@ -81,9 +81,28 @@ export function writeSavedSessions(sessions: Record<string, SavedSession>): void
 // Sync (called every 60 s by server.ts)
 // ---------------------------------------------------------------------------
 
+/**
+ * Refresh metadata for sessions the user has explicitly attached.
+ *
+ * `sessions.json` is a **curated set** — it contains only sessions the user
+ * has chosen to keep as tabs (via `addSavedSession` when the UI attaches
+ * one). This function never adds new entries; it only:
+ *
+ *   1. Updates `workingDir` / `claudeSessionId` / `lastSeen` for existing
+ *      entries that are still alive in tmux, so page-reload restoration
+ *      has fresh metadata.
+ *   2. Prunes entries that have been gone from tmux long enough to exceed
+ *      STALE_SECONDS — these are sessions the user killed externally and
+ *      never came back.
+ *
+ * Previously this upserted every live tmux session it saw, which meant
+ * auto-open on page reload restored tabs the user hadn't asked for. With
+ * many live sessions that blew past Chrome's 16-WebGL-context cap and
+ * caused a rendering ping-pong. Curated-set model avoids the whole class.
+ */
 export function syncSessionsFile(): Promise<void> {
   return serialized(async () => {
-    // 1. Get all live tmux sessions with pane paths in a single call
+    // 1. Read live tmux sessions — these are a lookup, not the source of truth
     const liveEntries: Array<{ name: string; workingDir: string }> = [];
     try {
       const { stdout } = await execFileAsync('tmux', [
@@ -102,16 +121,19 @@ export function syncSessionsFile(): Promise<void> {
       // tmux not running — no live sessions
     }
 
-    const liveSet = new Set(liveEntries.map((e) => e.name));
+    const liveMap = new Map(liveEntries.map((e) => [e.name, e]));
 
-    // 2. Read existing persisted sessions
+    // 2. Read existing persisted (curated) sessions
     const sessions = readSavedSessions();
     const now = Math.floor(Date.now() / 1000);
 
-    // 3. Upsert each live session
-    for (const { name, workingDir: panePath } of liveEntries) {
-      // Read claudeSessionId from the statusline-hook-written temp file
-      let claudeSessionId: string | null = sessions[name]?.claudeSessionId ?? null;
+    // 3. Refresh metadata for entries that are still live. Do NOT add new
+    //    entries for sessions the user hasn't attached.
+    for (const name of Object.keys(sessions)) {
+      const live = liveMap.get(name);
+      if (!live) continue; // gone from tmux — leave lastSeen alone; it'll prune eventually
+
+      let claudeSessionId: string | null = sessions[name].claudeSessionId;
       try {
         const id = readFileSync(`/tmp/wormhole-claude-session-${name}`, 'utf8').trim();
         if (id) claudeSessionId = id;
@@ -120,7 +142,7 @@ export function syncSessionsFile(): Promise<void> {
       }
 
       sessions[name] = {
-        workingDir: panePath || sessions[name]?.workingDir || '',
+        workingDir: live.workingDir || sessions[name].workingDir || '',
         claudeSessionId,
         lastSeen: now,
       };
@@ -128,12 +150,61 @@ export function syncSessionsFile(): Promise<void> {
 
     // 4. Prune entries that are stale AND not currently live
     for (const [name, session] of Object.entries(sessions)) {
-      if (!liveSet.has(name) && now - session.lastSeen > STALE_SECONDS) {
+      if (!liveMap.has(name) && now - session.lastSeen > STALE_SECONDS) {
         delete sessions[name];
       }
     }
 
     // 5. Persist
+    writeSavedSessions(sessions);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Add (explicit attach)
+// ---------------------------------------------------------------------------
+
+/**
+ * Add a session to the curated set. Called when the user explicitly attaches
+ * a detached session via the UI. If the session isn't live in tmux, this is
+ * a no-op (nothing to persist).
+ */
+export function addSavedSession(name: string): Promise<void> {
+  return serialized(async () => {
+    // Validate name before interpolating into a tmux command
+    if (!SAFE_NAME_RE.test(name)) return;
+
+    // Look up the live tmux session to grab workingDir
+    let workingDir = '';
+    try {
+      const { stdout } = await execFileAsync('tmux', [
+        'display-message',
+        '-p',
+        '-t',
+        name,
+        '#{pane_current_path}',
+      ]);
+      workingDir = stdout.trim();
+    } catch {
+      // Session not live — nothing to persist
+      return;
+    }
+
+    // Pick up any cached Claude session id that the statusline hook wrote
+    let claudeSessionId: string | null = null;
+    try {
+      const id = readFileSync(`/tmp/wormhole-claude-session-${name}`, 'utf8').trim();
+      if (id) claudeSessionId = id;
+    } catch {
+      // no file — leave as null
+    }
+
+    const sessions = readSavedSessions();
+    sessions[name] = {
+      workingDir,
+      claudeSessionId,
+      lastSeen: Math.floor(Date.now() / 1000),
+    };
     writeSavedSessions(sessions);
   });
 }

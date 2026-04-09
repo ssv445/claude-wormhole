@@ -178,6 +178,16 @@ export default function Home() {
     setActiveTab(name);
     setSidebarOpen(false);
     clearNotifications(name);
+    // Server state: add to sessions.json so this session is restored as a
+    // tab on next page reload. Fire-and-forget; the local tab open is what
+    // the user sees immediately. Called for every attach path: clicking a
+    // detached session in "Open session...", creating a new session,
+    // tapping a notification, etc.
+    fetch('/api/sessions', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'attach', name }),
+    }).catch(() => { /* silent */ });
   }, []);
 
   // Clear all notifications when app comes to foreground
@@ -206,6 +216,7 @@ export default function Home() {
   }, []);
 
   const detachSession = useCallback((name: string) => {
+    // Local state: remove the tab, pick a new active if this was the active one
     setOpenTabs((prev) => {
       const next = prev.filter((t) => t !== name);
       setActiveTab((current) => {
@@ -214,7 +225,17 @@ export default function Home() {
       });
       return next;
     });
+    // Server state: remove from sessions.json so it's not restored on reload.
+    // The tmux session itself keeps running — detach is a view concept only.
+    // Fire-and-forget; if it fails, worst case the session re-appears as
+    // attached on next reload and the user can detach again.
+    fetch('/api/sessions', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'detach', name }),
+    }).catch(() => { /* silent */ });
   }, []);
+
 
   const killSession = useCallback(async (name: string) => {
     try {

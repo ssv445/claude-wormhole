@@ -141,6 +141,14 @@ export function TerminalView({
   const wsRef = useRef<WebSocket | null>(null);
   const xtermRef = useRef<import('@xterm/xterm').Terminal | null>(null);
   const fitAddonRef = useRef<import('@xterm/addon-fit').FitAddon | null>(null);
+  // WebGL addon is loaded lazily on the visible tab only. Chrome caps
+  // concurrent WebGL contexts per origin (16), so mounting more terminals
+  // than that starts a context-loss ping-pong loop. Keeping the WebGL
+  // addon attached only to the active tab means 1 context is in use
+  // regardless of how many tabs are open. Background tabs use xterm's
+  // DOM renderer (which doesn't need a GPU context); they're display:none
+  // anyway, so there's nothing to paint.
+  const webglAddonRef = useRef<import('@xterm/addon-webgl').WebglAddon | null>(null);
 
   // Reconnection state
   const [connectionState, setConnectionState] = useState<ConnectionState>('connecting');
@@ -482,6 +490,69 @@ export function TerminalView({
     }
   }, [visible]);
 
+  // Scope WebGL addon to the active tab only.
+  //
+  // Chrome caps concurrent WebGL contexts at ~16 per origin. If we allocate
+  // one per mounted terminal, any wormhole user with many tabs open blows
+  // past the cap — Chrome starts displacing the oldest context, which fires
+  // `webglcontextlost`, which our onContextLoss handler interprets as
+  // "reattach", which steals a context from another terminal, etc. The
+  // ping-pong is visible as a repeating blank-flash across every pane.
+  //
+  // Fix: only the currently-visible terminal holds a WebGL context.
+  // Background tabs use xterm's DOM renderer, which doesn't need a GPU
+  // context. Since background tabs are `display: none`, the DOM renderer
+  // never actually paints — its only cost is JS cycles on incoming data,
+  // which is negligible. When a tab becomes active, we attach a fresh
+  // WebglAddon (~5-20ms, invisible on a tab-activation boundary).
+  useEffect(() => {
+    if (!termReady) return;
+    const term = xtermRef.current;
+    if (!term) return;
+
+    if (visible) {
+      // Attach WebGL if not already loaded for this terminal
+      if (webglAddonRef.current) return;
+      let cancelled = false;
+      (async () => {
+        try {
+          const { WebglAddon } = await import('@xterm/addon-webgl');
+          if (cancelled || !xtermRef.current) return;
+          const addon = new WebglAddon();
+          addon.onContextLoss(() => {
+            // GPU context lost (system sleep, driver crash, another tab
+            // displaced us). Dispose and don't try to reattach — if this
+            // terminal is still the active one, the next visibility change
+            // or an explicit re-activation will reattach via this effect.
+            addon.dispose();
+            if (webglAddonRef.current === addon) {
+              webglAddonRef.current = null;
+            }
+          });
+          term.loadAddon(addon);
+          webglAddonRef.current = addon;
+        } catch {
+          // WebGL2 not supported — DOM renderer is the automatic fallback
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    } else {
+      // Tab is no longer active — release the WebGL context so it's
+      // available for other tabs (or other WebGL consumers on the page).
+      const addon = webglAddonRef.current;
+      if (addon) {
+        webglAddonRef.current = null;
+        try {
+          addon.dispose();
+        } catch {
+          // already disposed — ignore
+        }
+      }
+    }
+  }, [visible, termReady]);
+
   // When restoring, poll until Claude Code is running before connecting WebSocket.
   // Claude's statusline hook writes claudeState — wait for it to become non-null.
   useEffect(() => {
@@ -639,26 +710,10 @@ export function TerminalView({
       term.open(termRef.current);
       fitAddon.fit();
 
-      // GPU-accelerated rendering via WebGL2 (same renderer VS Code uses).
-      // Falls back to DOM renderer if WebGL2 is unavailable (older devices).
-      try {
-        const { WebglAddon } = await import('@xterm/addon-webgl');
-        function attachWebgl() {
-          const addon = new WebglAddon();
-          addon.onContextLoss(() => {
-            // GPU context lost (system sleep, iOS background, driver crash).
-            // Dispose the dead addon and re-attach a fresh one — without this,
-            // the renderer is null and all refresh calls silently no-op,
-            // causing the terminal to freeze permanently.
-            addon.dispose();
-            try { attachWebgl(); } catch { /* fall back to DOM renderer */ }
-          });
-          term.loadAddon(addon);
-        }
-        attachWebgl();
-      } catch {
-        // WebGL2 not supported — DOM renderer is the automatic fallback
-      }
+      // WebGL addon is NOT loaded here — it's attached lazily by a separate
+      // effect that watches `visible`, so only the active tab holds a
+      // WebGL context at a time. See the effect below this component's
+      // init() call site.
 
       xtermRef.current = term;
       fitAddonRef.current = fitAddon;
@@ -897,6 +952,13 @@ export function TerminalView({
         reconnectTimerRef.current = null;
       }
       wsRef.current?.close();
+      // Dispose the WebGL addon (if any) before tearing down xterm. The
+      // visibility effect normally handles this, but when the whole
+      // component unmounts we need to release the GPU context too.
+      if (webglAddonRef.current) {
+        try { webglAddonRef.current.dispose(); } catch { /* already disposed */ }
+        webglAddonRef.current = null;
+      }
       cleanup.then((fn) => fn?.()).catch(() => {/* cleanup errors non-fatal on unmount */});
     };
     // theme intentionally excluded — handled by separate effect

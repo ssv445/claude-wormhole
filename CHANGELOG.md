@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.5.1] - 2026-04-08
+
+### Bug Fixes
+
+- fix: scope WebGL addon to the active tab only — background attached tabs use xterm's DOM renderer. Chrome caps concurrent WebGL contexts at 16 per origin, so mounting more terminals than that triggered a context-loss ping-pong loop visible as a repeating blank flash across every pane. Only the active tab now holds a GPU context.
+
+### Features
+
+- feat: `sessions.json` is now a **curated set** of user-attached sessions rather than "every live tmux session". The 60s sync only refreshes metadata for existing entries and never auto-adds new ones.
+- feat: sidebar shows only **attached** sessions; detached sessions live in a new "Open Session…" dropdown under the header ⋮ menu.
+- feat: sidebar sessions are grouped by folder path (alphabetical, case-insensitive), newest-first within each folder.
+- feat: **Detach** action on per-session menu — removes the session from `sessions.json` and unmounts its tab, while the tmux session itself keeps running. Re-attach any time from "Open Session…".
+- feat: new `PATCH /api/sessions` actions `attach` / `detach` for the curated-set lifecycle; new `addSavedSession()` helper in `src/lib/sessions.ts`.
+- feat: every session now carries a `createdAt` epoch alongside the display-friendly `created` string, so the sidebar can sort newest-first without re-parsing locale strings.
+
 ## [1.5.0] - 2026-04-08
 
 ### Features
