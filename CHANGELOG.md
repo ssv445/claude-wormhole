@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.6.0] - 2026-04-10
+
+### Features
+
+- feat: session trash + durable sessions.json protection
+
+### Bug Fixes
+
+- fix: release script awk newline error on multiline commit messages
+
+
 ## [1.5.1] - 2026-04-08
 
 ### Bug Fixes
