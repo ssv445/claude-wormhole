@@ -1,5 +1,5 @@
 import { createServer } from 'http';
-import { existsSync, rmSync } from 'fs';
+import { existsSync, rmSync, copyFileSync } from 'fs';
 import { writeFile, mkdir } from 'fs/promises';
 import { parse } from 'url';
 import { join, extname } from 'path';
@@ -7,7 +7,7 @@ import { randomBytes } from 'crypto';
 import { execFile, execFileSync } from 'child_process';
 import { promisify } from 'util';
 import next from 'next';
-import { syncSessionsFile } from './src/lib/sessions';
+import { syncSessionsFile, SESSIONS_FILE } from './src/lib/sessions';
 import { WebSocketServer, WebSocket } from 'ws';
 
 const dev = process.env.NODE_ENV !== 'production';
@@ -248,6 +248,16 @@ app.prepare().then(() => {
 
   server.listen(port, hostname, () => {
     console.log(`> claude-wormhole ready on http://${hostname}:${port}`);
+    // Back up sessions.json before first sync — protects against bugs that
+    // could wipe the curated set (e.g. transient read failure → empty write).
+    if (existsSync(SESSIONS_FILE)) {
+      try {
+        copyFileSync(SESSIONS_FILE, SESSIONS_FILE + '.bak');
+      } catch (err) {
+        console.warn('[sync] failed to back up sessions.json:', err);
+      }
+    }
+
     // Sync active sessions to ~/.wormhole/sessions.json every 60s.
     // Run immediately on startup to capture current state, then repeat.
     syncSessionsFile().catch((err: unknown) => {

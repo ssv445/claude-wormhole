@@ -4,6 +4,7 @@ import {
   readFileSync,
   writeFileSync,
   renameSync,
+  copyFileSync,
   mkdirSync,
   existsSync,
   unlinkSync,
@@ -19,7 +20,7 @@ const execFileAsync = promisify(execFile);
 
 export const WORMHOLE_DIR = join(homedir(), '.wormhole');
 export const SESSIONS_FILE = join(WORMHOLE_DIR, 'sessions.json');
-const STALE_DAYS = 7;
+const STALE_DAYS = 90;
 const STALE_SECONDS = STALE_DAYS * 24 * 60 * 60;
 const SAFE_NAME_RE = /^[a-zA-Z0-9_-]+$/;
 export { STALE_SECONDS };
@@ -58,9 +59,15 @@ export function readSavedSessions(): Record<string, SavedSession> {
     const raw = readFileSync(SESSIONS_FILE, 'utf8');
     const parsed = JSON.parse(raw) as SessionsFile;
     return parsed.sessions ?? {};
-  } catch {
-    // File missing or malformed — start fresh
-    return {};
+  } catch (err: unknown) {
+    // File genuinely missing → empty set (first run)
+    if (err && typeof err === 'object' && 'code' in err && err.code === 'ENOENT') {
+      return {};
+    }
+    // Any other error (permissions, corruption, bad JSON) — refuse to return
+    // empty so callers don't overwrite the real file with {}.
+    console.error('[sessions] failed to read sessions.json — refusing to return empty:', err);
+    throw err;
   }
 }
 
@@ -210,12 +217,111 @@ export function addSavedSession(name: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Trash (soft-delete) helpers
+// ---------------------------------------------------------------------------
+
+const TRASH_FILE = join(WORMHOLE_DIR, 'sessions.trash.json');
+
+interface TrashedSession extends SavedSession {
+  trashedAt: number; // epoch seconds
+  tmuxName: string;  // original tmux session name (key for restore)
+}
+
+interface TrashFile {
+  version: 1;
+  sessions: TrashedSession[];
+}
+
+const TRASH_MAX_DAYS = 90;
+const TRASH_MAX_SECONDS = TRASH_MAX_DAYS * 24 * 60 * 60;
+
+function readTrash(): TrashedSession[] {
+  try {
+    const raw = readFileSync(TRASH_FILE, 'utf8');
+    const parsed = JSON.parse(raw) as TrashFile;
+    return parsed.sessions ?? [];
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'code' in err && err.code === 'ENOENT') {
+      return [];
+    }
+    console.error('[sessions] failed to read trash file:', err);
+    return []; // trash is non-critical — don't throw
+  }
+}
+
+function writeTrash(sessions: TrashedSession[]): void {
+  mkdirSync(WORMHOLE_DIR, { recursive: true });
+  const data: TrashFile = { version: 1, sessions };
+  const tmp = TRASH_FILE + '.tmp';
+  writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
+  renameSync(tmp, TRASH_FILE);
+}
+
+function trashSession(name: string, session: SavedSession): void {
+  const trash = readTrash();
+  const now = Math.floor(Date.now() / 1000);
+
+  // Prune entries older than 90 days while we're here
+  const fresh = trash.filter((t) => now - t.trashedAt < TRASH_MAX_SECONDS);
+
+  fresh.push({
+    ...session,
+    tmuxName: name,
+    trashedAt: now,
+  });
+
+  writeTrash(fresh);
+  console.log(`[sessions] trashed "${name}" (claudeSessionId: ${session.claudeSessionId ?? 'none'})`);
+}
+
+/** List trashed sessions (for UI recovery picker). */
+export function listTrashedSessions(): TrashedSession[] {
+  const now = Math.floor(Date.now() / 1000);
+  return readTrash().filter((t) => now - t.trashedAt < TRASH_MAX_SECONDS);
+}
+
+/** Restore a trashed session back into the curated set. */
+export function restoreTrashedSession(tmuxName: string): Promise<void> {
+  return serialized(() => {
+    const trash = readTrash();
+    const idx = trash.findIndex((t) => t.tmuxName === tmuxName);
+    if (idx === -1) return;
+
+    const entry = trash[idx];
+    trash.splice(idx, 1);
+    writeTrash(trash);
+
+    const sessions = readSavedSessions();
+    sessions[tmuxName] = {
+      workingDir: entry.workingDir,
+      claudeSessionId: entry.claudeSessionId,
+      lastSeen: Math.floor(Date.now() / 1000),
+    };
+    writeSavedSessions(sessions);
+    console.log(`[sessions] restored "${tmuxName}" from trash`);
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Remove / Rename
 // ---------------------------------------------------------------------------
 
-export function removeSavedSession(name: string): Promise<void> {
+/**
+ * Remove a session from the curated set.
+ * @param moveToTrash — true when killing (DELETE), false when detaching (PATCH
+ *   detach). Detach just hides the tab; the tmux session is still alive, so
+ *   there's nothing to recover — no trash needed.
+ */
+export function removeSavedSession(name: string, moveToTrash = false): Promise<void> {
   return serialized(() => {
     const sessions = readSavedSessions();
+    const entry = sessions[name];
+
+    // Only trash on kill — detach is a view concept, session stays alive
+    if (moveToTrash && entry) {
+      trashSession(name, entry);
+    }
+
     delete sessions[name];
     writeSavedSessions(sessions);
 
@@ -265,10 +371,11 @@ export async function resurrectSession(
       session.claudeSessionId = null;
     }
 
-    // Validate working directory still exists
+    // Skip resurrection if cwd is gone (external drive not mounted, worktree
+    // deleted, etc.) but do NOT remove the entry — it's the user's curated
+    // set and the directory may come back. Entry costs nothing to keep.
     if (!existsSync(session.workingDir)) {
-      // Directory is gone — remove the stale entry and give up
-      removeSavedSession(name);
+      console.warn(`[resurrect] skipping "${name}" — workingDir missing: ${session.workingDir}`);
       return false;
     }
 

@@ -30,6 +30,14 @@ interface DetachedSession {
   claudeState: 'busy' | 'permission' | 'waiting' | 'idle' | 'error' | null;
 }
 
+function formatTrashAge(trashedAt: number): string {
+  const diff = Math.floor(Date.now() / 1000) - trashedAt;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
 export function Sidebar({
   theme,
   toggleTheme,
@@ -48,9 +56,19 @@ export function Sidebar({
   // The ⋮ dropdown has two views: the main menu (New / Restart / Theme / ...)
   // and an "Open detached session" flyout listing sessions live in tmux but
   // not currently attached as tabs. Toggle via setMenuView.
-  const [menuView, setMenuView] = useState<'main' | 'detached'>('main');
+  const [menuView, setMenuView] = useState<'main' | 'detached' | 'trash'>('main');
   const [detachedSessions, setDetachedSessions] = useState<DetachedSession[]>([]);
   const [detachedLoading, setDetachedLoading] = useState(false);
+
+  // Trash (killed sessions available for recovery)
+  interface TrashedSession {
+    tmuxName: string;
+    workingDir: string;
+    claudeSessionId: string | null;
+    trashedAt: number;
+  }
+  const [trashedSessions, setTrashedSessions] = useState<TrashedSession[]>([]);
+  const [trashLoading, setTrashLoading] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const { isIOS, isPWA, isFullscreen } = useViewport();
 
@@ -66,9 +84,9 @@ export function Sidebar({
     };
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        // Escape from detached view returns to main menu; escape from main
+        // Escape from sub-views returns to main menu; escape from main
         // menu closes the whole dropdown.
-        if (menuView === 'detached') {
+        if (menuView === 'detached' || menuView === 'trash') {
           setMenuView('main');
         } else {
           setMenuOpen(false);
@@ -116,6 +134,47 @@ export function Sidebar({
       setMenuView('main');
     },
     [onAttach],
+  );
+
+  // Fetch trashed (killed) sessions for recovery picker
+  const openTrashView = useCallback(async () => {
+    setMenuView('trash');
+    setTrashLoading(true);
+    try {
+      const res = await fetch('/api/sessions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'trash' }),
+      });
+      const data: TrashedSession[] = await res.json();
+      // Sort newest-trashed first
+      data.sort((a, b) => b.trashedAt - a.trashedAt);
+      setTrashedSessions(data);
+    } catch {
+      setTrashedSessions([]);
+    } finally {
+      setTrashLoading(false);
+    }
+  }, []);
+
+  const restoreFromTrash = useCallback(
+    async (tmuxName: string) => {
+      try {
+        await fetch('/api/sessions', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'restore', name: tmuxName }),
+        });
+        // Attach the restored session as a tab
+        onAttach(tmuxName);
+        setMenuOpen(false);
+        setMenuView('main');
+        setRefreshKey((k) => k + 1);
+      } catch {
+        // silent
+      }
+    },
+    [onAttach, setRefreshKey],
   );
 
   const restartAll = useCallback(async () => {
@@ -176,7 +235,7 @@ export function Sidebar({
               </svg>
             </button>
             {menuOpen && menuView === 'main' && (
-              <div className="absolute right-0 top-full mt-1 w-52 bg-surface border border-border rounded-lg shadow-lg z-50 py-1 text-sm">
+              <div className="absolute left-0 top-full mt-1 w-52 bg-surface border border-border rounded-lg shadow-lg z-50 py-1 text-sm">
                 <button
                   onClick={() => { setMenuOpen(false); onNewSession(); }}
                   className="w-full text-left px-3 py-2 text-secondary hover:bg-surface-hover transition-colors"
@@ -187,7 +246,14 @@ export function Sidebar({
                   onClick={openDetachedView}
                   className="w-full text-left px-3 py-2 text-secondary hover:bg-surface-hover transition-colors flex items-center justify-between"
                 >
-                  <span>Open Session…</span>
+                  <span>Attach Session…</span>
+                  <span className="text-muted">›</span>
+                </button>
+                <button
+                  onClick={openTrashView}
+                  className="w-full text-left px-3 py-2 text-secondary hover:bg-surface-hover transition-colors flex items-center justify-between"
+                >
+                  <span>Restore Session…</span>
                   <span className="text-muted">›</span>
                 </button>
                 <button
@@ -235,7 +301,7 @@ export function Sidebar({
               </div>
             )}
             {menuOpen && menuView === 'detached' && (
-              <div className="absolute right-0 top-full mt-1 w-72 bg-surface border border-border rounded-lg shadow-lg z-50 py-1 text-sm max-h-[70vh] overflow-y-auto">
+              <div className="absolute left-0 top-full mt-1 w-72 bg-surface border border-border rounded-lg shadow-lg z-50 py-1 text-sm max-h-[70vh] overflow-y-auto">
                 {/* Header: back button + title */}
                 <div className="flex items-center gap-2 px-2 py-1.5 border-b border-border">
                   <button
@@ -272,6 +338,49 @@ export function Sidebar({
                         {s.claudeState === 'idle' && (
                           <span className="text-[10px] text-green-400 shrink-0">idle</span>
                         )}
+                      </div>
+                      {s.workingDir && (
+                        <div className="text-[11px] text-muted font-mono truncate mt-0.5">
+                          {s.workingDir.replace(/^\/Users\/[^/]+/, '~')}
+                        </div>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+            {menuOpen && menuView === 'trash' && (
+              <div className="absolute left-0 top-full mt-1 w-72 bg-surface border border-border rounded-lg shadow-lg z-50 py-1 text-sm max-h-[70vh] overflow-y-auto">
+                {/* Header: back button + title */}
+                <div className="flex items-center gap-2 px-2 py-1.5 border-b border-border">
+                  <button
+                    onClick={() => setMenuView('main')}
+                    className="text-muted hover:text-primary px-1 py-0.5 rounded transition-colors"
+                    title="Back to menu"
+                  >
+                    ‹
+                  </button>
+                  <span className="text-xs font-mono text-muted">Killed sessions</span>
+                </div>
+
+                {trashLoading ? (
+                  <div className="px-3 py-3 text-xs text-muted">Loading…</div>
+                ) : trashedSessions.length === 0 ? (
+                  <div className="px-3 py-3 text-xs text-muted">
+                    No killed sessions to restore.
+                  </div>
+                ) : (
+                  trashedSessions.map((s) => (
+                    <button
+                      key={`${s.tmuxName}-${s.trashedAt}`}
+                      onClick={() => restoreFromTrash(s.tmuxName)}
+                      className="w-full text-left px-3 py-2 text-secondary hover:bg-surface-hover transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[13px] truncate flex-1">{s.tmuxName}</span>
+                        <span className="text-[10px] text-muted shrink-0">
+                          {formatTrashAge(s.trashedAt)}
+                        </span>
                       </div>
                       {s.workingDir && (
                         <div className="text-[11px] text-muted font-mono truncate mt-0.5">

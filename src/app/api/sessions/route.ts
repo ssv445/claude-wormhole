@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listSessionsWithInfo, newSession, killSession, renameSession, restartClaudeSession } from '@/lib/tmux';
-import { addSavedSession, removeSavedSession, renameSavedSession, readSavedSessions, resurrectSession, STALE_SECONDS } from '@/lib/sessions';
+import { addSavedSession, removeSavedSession, renameSavedSession, readSavedSessions, resurrectSession, listTrashedSessions, restoreTrashedSession, STALE_SECONDS } from '@/lib/sessions';
 
 export async function GET() {
   try {
@@ -119,6 +119,32 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
+  // List trashed (killed) sessions available for recovery
+  if (body.action === 'trash') {
+    try {
+      const trashed = listTrashedSessions();
+      return NextResponse.json(trashed);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to list trash';
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
+  }
+
+  // Restore a killed session from trash → back into sessions.json + resurrect
+  if (body.action === 'restore') {
+    const { name } = body;
+    if (!name || typeof name !== 'string') {
+      return NextResponse.json({ error: 'name is required' }, { status: 400 });
+    }
+    try {
+      await restoreTrashedSession(name);
+      return NextResponse.json({ ok: true });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to restore session';
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
+  }
+
   // Rename action
 
   const { oldName, newName } = body;
@@ -142,7 +168,7 @@ export async function DELETE(req: NextRequest) {
   }
   try {
     await killSession(name);
-    await removeSavedSession(name);
+    await removeSavedSession(name, true);
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Failed to kill session';
